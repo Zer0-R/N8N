@@ -22,23 +22,34 @@ let fiche = lire('R · Fiche');
 fiche = fiche.data ?? fiche;
 if (Array.isArray(fiche)) fiche = fiche[0] || {};
 const media = lire('R · Héberger');
-// Anti-doublon : publication du jour encore en cours (< 1 h), ou plateforme dont l'ID de la fiche existe toujours
-// (lu directement : GET /{id}). On ne republie que si l'objet est introuvable ou en erreur.
+// Anti-doublon : publication du jour encore en cours (< 1 h), ou ID de la fiche lu directement (GET /{id}) :
+//   en_ligne → pas de republication ; absent (Meta : objet inexistant, ou vidéo FB ni ready ni processing) → republication ;
+//   inconnu (débit, 5xx, délai…) → pas de republication, avertissement (nouvel essai à la vérification suivante).
 const minutes = t => t ? (Date.now() - Date.parse(t)) / 60000 : Infinity;
 const ageMin = minutes(fiche.ecrit_a);
+const etat = (id, obj, fb) => {
+  if (!id) return 'absent';
+  const er = obj && obj.error;
+  if (er) return (er.code === 100 || er.error_subcode === 33 || /does not exist/i.test(er.message || '')) ? 'absent' : 'inconnu';
+  if (!obj || !obj.id) return 'inconnu';
+  if (!fb) return 'en_ligne';
+  const vs = obj.status?.video_status;
+  return vs === 'ready' || vs === 'processing' ? 'en_ligne' : vs ? 'absent' : 'inconnu';
+};
 const objIG = lire('R · IG objet'), objFB = lire('R · FB objet');
-const enLigneIG = !!(fiche.instagram_id && objIG.id && !objIG.error);
-const enLigneFB = !!(fiche.facebook_id && objFB.id && !objFB.error && objFB.status?.video_status !== 'error');
-const instagram = ev.rat.instagram >= 0 && !enLigneIG;
-const facebook = ev.rat.facebook >= 0 && !enLigneFB;
+const etats = { instagram: etat(fiche.instagram_id, objIG, false), facebook: etat(fiche.facebook_id, objFB, true) };
+const erreurs = { instagram: String(objIG.error?.message || '').slice(0, 120), facebook: String(objFB.error?.message || '').slice(0, 120) };
+const instagram = ev.rat.instagram >= 0 && etats.instagram === 'absent';
+const facebook = ev.rat.facebook >= 0 && etats.facebook === 'absent';
 let raison = '';
 if (!fiche || !fiche.video_path) raison = 'fiche du jour introuvable (_publications/' + $now.setZone('Europe/Paris').toISODate() + '.json)';
 else if (fiche.statut === 'en_cours' && ageMin < 60) raison = `publication du jour encore en cours (lancée il y a ${Math.round(ageMin)} min) — pas de rattrapage pour éviter un doublon`;
-else if (!instagram && !facebook) raison = `déjà en ligne d'après l'API (Instagram ${fiche.instagram_id || '—'}, Facebook ${fiche.facebook_id || '—'}), non retrouvé par la recherche du jour`;
+else if (!instagram && !facebook) raison = 'rien à republier : ' + ['instagram', 'facebook'].filter(k => ev.rat[k] >= 0)
+  .map(k => `${k} ${etats[k] === 'en_ligne' ? 'toujours en ligne (' + fiche[k + '_id'] + ')' : 'vérification impossible (' + erreurs[k] + ')'}`).join(', ');
 else if (!media.url) raison = 'vidéo non hébergée : ' + String(media.error || media.message || 'fichier ' + fiche.video_path + ' illisible').slice(0, 200);
 return [{ json: {
   publier: !raison, raison,
-  fiche,
+  fiche, etats, erreurs,
   video_url: media.url || '',
   caption: fiche.caption, fb_title: fiche.fb_title, fb_description: fiche.fb_description,
   share_to_feed: fiche.share_to_feed,
@@ -70,8 +81,11 @@ const fiche = prep.fiche || {};
 const maj = (idx, nom, cle) => {
   if (idx < 0) return;
   const idFiche = fiche[cle + '_id'];
-  if (idFiche && prep[cle] === false && !/encore en cours/.test(prep.raison || ''))
+  const etat = prep.etats?.[cle];
+  if (prep[cle] === false && etat === 'en_ligne')
     pb[idx] = `ℹ️ ${nom} : publié (${e(idFiche)}) et toujours en ligne d'après l'API, mais non retrouvé par la recherche du jour — pas de republication`;
+  else if (prep[cle] === false && etat === 'inconnu')
+    pb[idx] = `⚠️ ${nom} : Reel non retrouvé ; vérification de l'ID ${e(idFiche)} impossible (${e(prep.erreurs?.[cle] || 'erreur API')}) — pas de republication, nouvel essai à la prochaine vérification`;
   else if (res[cle + '_id']) pb[idx] = `🔁 ${nom} : Reel manquant, republié automatiquement (${e(res[cle + '_id'])})`;
   else pb[idx] += ` — rattrapage échoué : ${e(prep.raison || res[cle + '_erreur'] || res.error?.message || 'erreur inconnue')}`;
 };
