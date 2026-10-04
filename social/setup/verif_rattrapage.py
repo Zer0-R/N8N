@@ -22,14 +22,18 @@ let fiche = lire('R · Fiche');
 fiche = fiche.data ?? fiche;
 if (Array.isArray(fiche)) fiche = fiche[0] || {};
 const media = lire('R · Héberger');
-// Anti-doublon : publication du jour encore en cours (< 1 h), ou plateforme déjà publiée d'après la fiche
-const ageMin = fiche.ecrit_a ? (Date.now() - Date.parse(fiche.ecrit_a)) / 60000 : Infinity;
-const instagram = ev.rat.instagram >= 0 && !fiche.instagram_id;
-const facebook = ev.rat.facebook >= 0 && !fiche.facebook_id;
+// Anti-doublon : publication du jour encore en cours (< 1 h), ou plateforme publiée d'après la fiche il y a moins d'1 h
+// (le temps qu'elle apparaisse dans l'API). Au-delà, un ID sans Reel visible = Reel réellement manquant → on republie.
+const minutes = t => t ? (Date.now() - Date.parse(t)) / 60000 : Infinity;
+const ageMin = minutes(fiche.ecrit_a);
+const ageFin = minutes(fiche.rattrape_a || fiche.termine_a);
+const recent = ageFin < 60;
+const instagram = ev.rat.instagram >= 0 && !(fiche.instagram_id && recent);
+const facebook = ev.rat.facebook >= 0 && !(fiche.facebook_id && recent);
 let raison = '';
 if (!fiche || !fiche.video_path) raison = 'fiche du jour introuvable (_publications/' + $now.setZone('Europe/Paris').toISODate() + '.json)';
 else if (fiche.statut === 'en_cours' && ageMin < 60) raison = `publication du jour encore en cours (lancée il y a ${Math.round(ageMin)} min) — pas de rattrapage pour éviter un doublon`;
-else if (!instagram && !facebook) raison = `déjà publié d'après la fiche (Instagram ${fiche.instagram_id || '—'}, Facebook ${fiche.facebook_id || '—'}) : pas encore visible dans l'API ?`;
+else if (!instagram && !facebook) raison = `publié il y a ${Math.round(ageFin)} min d'après la fiche (Instagram ${fiche.instagram_id || '—'}, Facebook ${fiche.facebook_id || '—'}) : pas encore visible dans l'API ?`;
 else if (!media.url) raison = 'vidéo non hébergée : ' + String(media.error || media.message || 'fichier ' + fiche.video_path + ' illisible').slice(0, 200);
 return [{ json: {
   publier: !raison, raison,
@@ -66,7 +70,7 @@ const maj = (idx, nom, cle) => {
   if (idx < 0) return;
   const idFiche = fiche[cle + '_id'];
   if (idFiche && prep[cle] === false && !/encore en cours/.test(prep.raison || ''))
-    pb[idx] = `ℹ️ ${nom} : déjà publié d'après la fiche du jour (${e(idFiche)}), pas encore visible dans l'API — pas de republication`;
+    pb[idx] = `ℹ️ ${nom} : publié il y a moins d'1 h d'après la fiche du jour (${e(idFiche)}), pas encore visible dans l'API — pas de republication`;
   else if (res[cle + '_id']) pb[idx] = `🔁 ${nom} : Reel manquant, republié automatiquement (${e(res[cle + '_id'])})`;
   else pb[idx] += ` — rattrapage échoué : ${e(prep.raison || res[cle + '_erreur'] || res.error?.message || 'erreur inconnue')}`;
 };
