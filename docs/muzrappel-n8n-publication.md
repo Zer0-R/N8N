@@ -185,3 +185,19 @@ Workflow `eSABPiZmB8tjkT39` (21h Paris). Branche YouTube inchangée. Branche Ins
 - Ignorés : commentaires de muz.rappel, commentaires auxquels muz.rappel a déjà répondu (anti-doublon, sans état).
 - Nœuds HTTP en `onError: continueRegularOutput` : une erreur Instagram ne bloque pas YouTube.
 - Sauvegarde avant modif : `/root/n8n-backup-ig-via-fb-20261004/eSABPiZmB8tjkT39_avant_insta.json`.
+
+## Publication Meta fiable + rattrapage automatique (2026-10-04)
+- **Sous-workflows « Meta - Publier Reel (VocaBag) »** `WFKPD7GzMgbEuM5F` et **« (Muz Rappel) »** `7YuYOdKwY7tZQceq`
+  (`social/setup/build_meta_reel.py`) : Reel Instagram (conteneur → statut FINISHED → `media_publish`) puis vidéo de page
+  Facebook, en nœuds HTTP standard (graph.facebook.com, token de page). **Le nœud communautaire
+  `@mookielianhd/n8n-nodes-instagram` n'est plus utilisé** (ses patchs locaux sautaient à chaque mise à jour).
+  3 tentatives par plateforme, 60 s d'écart, pas de nouvelle tentative si token invalide (code 190) ; échec définitif →
+  **alerte Telegram immédiate** (@vocabagbot / @muzrappelbot). Retour : `{instagram_id, instagram_erreur, facebook_id, facebook_erreur}`.
+- **Vocabag Video / Muzrappel Video** (`social/setup/patch_video_publication.py`) : `Publish` + `Publish Facebook` remplacés par
+  `Préparer publication` → `Publier Reel (IG + FB)` → `Instagram publié ?` / `Facebook publié ?` → `Marquer…`. Chaque jour, fiche
+  `channels/<compte>/videos/_publications/AAAA-MM-JJ.json` (légende, titres, chemin de la vidéo, dossier, id en base ; purgée à 7 j).
+- **Rattrapage automatique** dans « Muzrappel - Vérification » et « VocaBag - Vérification » (`social/setup/verif_rattrapage.py`) :
+  Reel absent d'Instagram/Facebook (hors erreur de token) → fiche du jour → vidéo lue sur disque → `POST /stage` (service média,
+  URL publique) → sous-workflow (alerter=false) → UPDATE du suivi → message « 🔁 … republié automatiquement » ou raison de l'échec.
+  YouTube manquant : alerte seulement. Chaîne testée de bout en bout le 2026-10-04 (publication simulée).
+- Sauvegardes avant modification : `/root/n8n-backup-ig-via-fb-20261004/*_avant_meta_reel.json`.

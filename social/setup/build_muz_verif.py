@@ -17,6 +17,8 @@ import re
 import uuid
 from pathlib import Path
 
+import verif_rattrapage
+
 HERE = Path(__file__).resolve().parent
 OUT = HERE.parent / 'workflows' / '08_muz_verif.json'
 WF_NAME = 'Muzrappel - Vérification'
@@ -48,6 +50,7 @@ const today = now.toISODate();
 const moment = cfg.forcer_moment || (now.hour < 14 ? 'matin' : 'soir');
 const test = $execution.mode === 'test';
 const pb = [], ok = [];
+const rat = { instagram: -1, facebook: -1 };   // index dans pb du Reel manquant → rattrapage automatique
 const parisDate = v => {
   if (v == null || v === '') return null;
   const d = /^\d+$/.test(String(v)) ? DateTime.fromSeconds(Number(v)) : DateTime.fromISO(String(v));
@@ -71,7 +74,7 @@ let er = apiErr(ig, 'Instagram');
 if (er) pb.push(er);
 else {
   const r = (ig.data || []).find(m => m.media_product_type === 'REELS' && parisDate(m.timestamp) === today);
-  r ? ok.push(`Instagram : Reel du jour (${e(r.permalink)})`) : pb.push('❌ Instagram : aucun Reel publié aujourd\'hui sur @muz.rappel');
+  r ? ok.push(`Instagram : Reel du jour (${e(r.permalink)})`) : (rat.instagram = pb.length, pb.push('❌ Instagram : aucun Reel publié aujourd\'hui sur @muz.rappel'));
 }
 // --- Reel du jour : Facebook (les vidéos de story n'ont pas de permalien /reel/)
 const fb = get('FB · Vidéos');
@@ -79,7 +82,7 @@ er = apiErr(fb, 'Facebook');
 if (er) pb.push(er);
 else {
   const v = (fb.data || []).find(x => parisDate(x.created_time) === today && /\/reel\//.test(x.permalink_url || ''));
-  v ? ok.push(`Facebook : Reel du jour (${e(v.title || v.id)})`) : pb.push('❌ Facebook : aucun Reel publié aujourd\'hui sur la page Muz Rappel');
+  v ? ok.push(`Facebook : Reel du jour (${e(v.title || v.id)})`) : (rat.facebook = pb.length, pb.push('❌ Facebook : aucun Reel publié aujourd\'hui sur la page Muz Rappel'));
 }
 // --- Reel du jour : YouTube
 const ytc = get('YT · Chaîne');
@@ -116,7 +119,20 @@ else ok.push(`Stock : ${db.restant} scripts prêts`);
 
 const titre = pb.length ? `🚨 <b>Muzrappel — ${pb.length} problème(s)</b>` : '✅ <b>Muzrappel — tout est OK</b>';
 const texte = `${titre} (${moment}, ${now.toFormat('dd/MM HH:mm')})\n\n` + [...pb, ...(pb.length && !test ? [] : ok.map(x => '✔️ ' + x))].join('\n');
-return [{ json: { envoyer: pb.length > 0 || test, problemes: pb.length, texte: texte.slice(0, 4000), chat_id: cfg.chat_id } }];
+return [{ json: { envoyer: pb.length > 0 || test, problemes: pb.length, texte: texte.slice(0, 4000), chat_id: cfg.chat_id,
+  pb, ok, rat, test, label: 'Muzrappel', entete: `${moment}, ${now.toFormat('dd/MM HH:mm')}` } }];
+"""
+
+
+SQL_JS = r"""
+// Suivi favima_bdd.muzrappel après rattrapage (id de la ligne lu dans la fiche du jour)
+const f = $('R · Préparer').first().json.fiche || {};
+const r = $input.first().json;
+const id = parseInt(f.db_id, 10);
+const sets = [];
+if (r.instagram_id) sets.push('posted_on_instagram = 1');
+if (r.facebook_id) sets.push('posted_on_facebook = 1');
+return [{ json: { ...r, sql: sets.length && id > 0 ? `UPDATE muzrappel SET ${sets.join(', ')} WHERE id = ${id}` : '' } }];
 """
 
 
@@ -185,10 +201,17 @@ def build():
     link('Planifié', 'Config')
     link('Test manuel', 'Config')
     chain = ['Config', 'IG · Publications', 'IG · Stories', 'FB · Vidéos', 'FB · Stories', 'YT · Chaîne',
-             'YT · Dernières vidéos', 'BD · Stock', 'Évaluer', 'Envoyer ?']
+             'YT · Dernières vidéos', 'BD · Stock', 'Évaluer']
     for a, b in zip(chain, chain[1:]):
         link(a, b)
     link('Envoyer ?', 'Alerte Telegram', 0)
+    link('Évaluer', 'Rattraper ?')
+    verif_rattrapage.ajouter(nodes, link, 'muz-verif/', node, http, '7YuYOdKwY7tZQceq', '/files/muzrappel/_publications', CRED_DB, SQL_JS, 2200)
+    for n in nodes:   # « Envoyer ? » / Telegram après la branche de rattrapage
+        if n['name'] == 'Envoyer ?':
+            n['position'] = [4840, 100]
+        if n['name'] == 'Alerte Telegram':
+            n['position'] = [5060, 0]
     return {'name': WF_NAME, 'nodes': nodes, 'connections': conn,
             'settings': {'executionOrder': 'v1', 'timezone': 'Europe/Paris', 'errorWorkflow': ERREURS_WF,
                          'callerPolicy': 'workflowsFromSameOwner'}}

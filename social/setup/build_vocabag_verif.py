@@ -16,6 +16,8 @@ import re
 import uuid
 from pathlib import Path
 
+import verif_rattrapage
+
 from build_muz_verif import http as _http, node as _node
 
 HERE = Path(__file__).resolve().parent
@@ -49,6 +51,7 @@ const today = now.toISODate();
 const moment = cfg.forcer_moment || (now.hour < 19 ? 'apres_reel' : 'soir');
 const test = $execution.mode === 'test';
 const pb = [], ok = [];
+const rat = { instagram: -1, facebook: -1 };   // index dans pb du Reel manquant → rattrapage automatique
 const parisDate = v => {
   if (v == null || v === '') return null;
   const d = /^\d+$/.test(String(v)) ? DateTime.fromSeconds(Number(v)) : DateTime.fromISO(String(v));
@@ -82,7 +85,7 @@ if (er) pb.push(er);
 else {
   const r = (ig.data || []).find(m => m.media_product_type === 'REELS' && parisDate(m.timestamp) === today);
   if (r) { ok.push(`Instagram : Reel du jour (${e(r.permalink)})`); suivi('posted_on_instagram', 'Instagram'); }
-  else pb.push('❌ Instagram : aucun Reel publié aujourd\'hui sur @vocabag');
+  else (rat.instagram = pb.length, pb.push('❌ Instagram : aucun Reel publié aujourd\'hui sur @vocabag'));
 }
 // --- Reel du jour : Facebook (les vidéos de story n'ont pas de permalien /reel/)
 const fb = get('FB · Vidéos');
@@ -91,7 +94,7 @@ if (er) pb.push(er);
 else {
   const v = (fb.data || []).find(x => parisDate(x.created_time) === today && /\/reel\//.test(x.permalink_url || ''));
   if (v) { ok.push(`Facebook : Reel du jour (${e(v.title || v.id)})`); suivi('posted_on_facebook', 'Facebook'); }
-  else pb.push('❌ Facebook : aucun Reel publié aujourd\'hui sur la page VocaBag');
+  else (rat.facebook = pb.length, pb.push('❌ Facebook : aucun Reel publié aujourd\'hui sur la page VocaBag'));
 }
 // --- Reel du jour : YouTube
 const ytc = get('YT · Chaîne');
@@ -125,7 +128,21 @@ if (moment === 'soir') {
 const titre = pb.length ? `🚨 <b>VocaBag — ${pb.length} problème(s)</b>` : '✅ <b>VocaBag — tout est OK</b>';
 const texte = `${titre} (${moment === 'soir' ? 'soir' : 'après le Reel'}, ${now.toFormat('dd/MM HH:mm')})\n\n`
   + [...pb, ...(pb.length && !test ? [] : ok.map(x => '✔️ ' + x))].join('\n');
-return [{ json: { envoyer: pb.length > 0 || test, problemes: pb.length, texte: texte.slice(0, 4000), chat_id: cfg.chat_id } }];
+return [{ json: { envoyer: pb.length > 0 || test, problemes: pb.length, texte: texte.slice(0, 4000), chat_id: cfg.chat_id,
+  pb, ok, rat, test, label: 'VocaBag', entete: `${moment === 'soir' ? 'soir' : 'après le Reel'}, ${now.toFormat('dd/MM HH:mm')}` } }];
+"""
+
+
+SQL_JS = r"""
+// Suivi vocabag.vocabag_videos après rattrapage (dossier lu dans la fiche du jour)
+const f = $('R · Préparer').first().json.fiche || {};
+const r = $input.first().json;
+const folder = String(f.folder || '').replace(/[^A-Za-z0-9_]/g, '');
+const num = v => String(v).replace(/[^0-9]/g, '');
+const sets = [];
+if (r.instagram_id) sets.push(`posted_on_instagram = 1, instagram_media_id = '${num(r.instagram_id)}', posted_instagram_at = NOW()`);
+if (r.facebook_id) sets.push(`posted_on_facebook = 1, facebook_video_id = '${num(r.facebook_id)}', posted_facebook_at = NOW()`);
+return [{ json: { ...r, sql: sets.length && folder ? `UPDATE vocabag_videos SET ${sets.join(', ')} WHERE folder = '${folder}'` : '' } }];
 """
 
 
@@ -191,10 +208,17 @@ def build():
     link('Planifié', 'Config')
     link('Test manuel', 'Config')
     chain = ['Config', 'BD · Vidéo du jour', 'IG · Publications', 'IG · Stories', 'FB · Vidéos', 'FB · Stories',
-             'YT · Chaîne', 'YT · Dernières vidéos', 'Évaluer', 'Envoyer ?']
+             'YT · Chaîne', 'YT · Dernières vidéos', 'Évaluer']
     for a, b in zip(chain, chain[1:]):
         link(a, b)
     link('Envoyer ?', 'Alerte Telegram', 0)
+    link('Évaluer', 'Rattraper ?')
+    verif_rattrapage.ajouter(nodes, link, NS, node, http, 'WFKPD7GzMgbEuM5F', '/files/vocabag/_publications', CRED_DB, SQL_JS, 2200)
+    for n in nodes:   # « Envoyer ? » / Telegram après la branche de rattrapage
+        if n['name'] == 'Envoyer ?':
+            n['position'] = [4840, 100]
+        if n['name'] == 'Alerte Telegram':
+            n['position'] = [5060, 0]
     return {'name': WF_NAME, 'nodes': nodes, 'connections': conn,
             'settings': {'executionOrder': 'v1', 'timezone': 'Europe/Paris', 'errorWorkflow': ERREURS_WF,
                          'callerPolicy': 'workflowsFromSameOwner'}}
