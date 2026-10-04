@@ -1,0 +1,554 @@
+{
+  "name": "Muzrappel - Vérification",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8,
+              "triggerAtMinute": 15
+            },
+            {
+              "triggerAtHour": 21,
+              "triggerAtMinute": 45
+            }
+          ]
+        }
+      },
+      "id": "9c63023a-23ca-5674-b2f7-4e8bffc805da",
+      "name": "Planifié",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b84a2215-1651-5629-abad-784693bffe32",
+      "name": "Test manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// CONFIGURATION — modifier ici. Les secrets restent dans les credentials n8n.\nreturn [{ json: {\n  graph: 'https://graph.facebook.com/v23.0',\n  ig_user: '17841472522032723',        // @muz.rappel (lié à la page)\n  fb_page: '501465773057138',          // page Muz Rappel\n  stories_attendues: 3,                // 09h Reel + 13h question + 20h réponse (contrôle du soir)\n  seuil_stock: 7,                      // alerte si moins de N scripts prêts à rendre\n  chat_id: '6980427615',               // conversation privée avec @muzrappelbot\n  forcer_moment: '',                   // test : 'matin' | 'soir' (sinon d'après l'heure). Remettre ''.\n} }];\n"
+      },
+      "id": "fd2c8646-ac3f-5a89-8feb-e43d6c2c76d0",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.graph }}/{{ $('Config').first().json.ig_user }}/media",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "timestamp,media_product_type,permalink"
+            },
+            {
+              "name": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "0364d2a0-41eb-5808-9c11-9d87ef82d499",
+      "name": "IG · Publications",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        100
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.graph }}/{{ $('Config').first().json.ig_user }}/stories",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "timestamp,media_type"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "d7c63ff8-bbe3-5c0a-9eb3-a0670727acd9",
+      "name": "IG · Stories",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        100
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.graph }}/{{ $('Config').first().json.fb_page }}/videos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "created_time,title,permalink_url"
+            },
+            {
+              "name": "limit",
+              "value": "15"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "aadc5997-510d-59f2-9f90-dae4573436f9",
+      "name": "FB · Vidéos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        100
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.graph }}/{{ $('Config').first().json.fb_page }}/stories",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "25"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "5146bd22-7785-5d9e-beeb-c2f6dc2d6c8b",
+      "name": "FB · Stories",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        100
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/channels",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "contentDetails"
+            },
+            {
+              "name": "mine",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "46e4fc1f-1fc4-540b-b31f-9d995737e209",
+      "name": "YT · Chaîne",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        100
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "cwYHFUad2DZdTq0k",
+          "name": "YouTube account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/playlistItems",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "snippet,contentDetails"
+            },
+            {
+              "name": "maxResults",
+              "value": "5"
+            },
+            {
+              "name": "playlistId",
+              "value": "={{ $json.items?.[0]?.contentDetails?.relatedPlaylists?.uploads || 'introuvable' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "b8f971a5-1b92-5bd1-b040-609550a81fe4",
+      "name": "YT · Dernières vidéos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        100
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "cwYHFUad2DZdTq0k",
+          "name": "YouTube account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS restant FROM muzrappel WHERE script_create = 1 AND video_create = 0",
+        "options": {}
+      },
+      "id": "1b6052f8-71d3-5fff-a1c3-2071ac956a07",
+      "name": "BD · Stock",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        1760,
+        100
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "tif3ZW4DtUwXJyLA",
+          "name": "MySQL account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst cfg = $('Config').first().json;\nconst now = DateTime.now().setZone('Europe/Paris');\nconst today = now.toISODate();\nconst moment = cfg.forcer_moment || (now.hour < 14 ? 'matin' : 'soir');\nconst test = $execution.mode === 'test';\nconst pb = [], ok = [];\nconst parisDate = v => {\n  if (v == null || v === '') return null;\n  const d = /^\\d+$/.test(String(v)) ? DateTime.fromSeconds(Number(v)) : DateTime.fromISO(String(v));\n  return d.isValid ? d.setZone('Europe/Paris').toISODate() : null;\n};\n// Erreur d'API → message lisible (et null si la réponse est valide)\nconst apiErr = (j, quoi) => {\n  const er = j && j.error;\n  if (!er) return null;\n  const code = er.code ?? er.status ?? '';\n  const msg = er.message || JSON.stringify(er).slice(0, 200);\n  if (String(code) === '190') return `🔑 ${quoi} : token Meta invalide (code 190) — régénérer le token de page Muz Rappel. <i>${e(msg)}</i>`;\n  if (String(code) === '401' || /invalid_grant|unauthorized/i.test(msg)) return `🔑 ${quoi} : token YouTube invalide — reconnecter la credential « YouTube account ». <i>${e(msg)}</i>`;\n  return `⚠️ ${quoi} : erreur API ${e(code)} — <i>${e(msg)}</i>`;\n};\nconst get = n => { try { return $(n).first().json; } catch (x) { return { error: { message: 'nœud non exécuté' } }; } };\n\n// --- Reel du jour : Instagram\nconst ig = get('IG · Publications');\nlet er = apiErr(ig, 'Instagram');\nif (er) pb.push(er);\nelse {\n  const r = (ig.data || []).find(m => m.media_product_type === 'REELS' && parisDate(m.timestamp) === today);\n  r ? ok.push(`Instagram : Reel du jour (${e(r.permalink)})`) : pb.push('❌ Instagram : aucun Reel publié aujourd\\'hui sur @muz.rappel');\n}\n// --- Reel du jour : Facebook (les vidéos de story n'ont pas de permalien /reel/)\nconst fb = get('FB · Vidéos');\ner = apiErr(fb, 'Facebook');\nif (er) pb.push(er);\nelse {\n  const v = (fb.data || []).find(x => parisDate(x.created_time) === today && /\\/reel\\//.test(x.permalink_url || ''));\n  v ? ok.push(`Facebook : Reel du jour (${e(v.title || v.id)})`) : pb.push('❌ Facebook : aucun Reel publié aujourd\\'hui sur la page Muz Rappel');\n}\n// --- Reel du jour : YouTube\nconst ytc = get('YT · Chaîne');\nconst yt = get('YT · Dernières vidéos');\ner = apiErr(ytc, 'YouTube') || apiErr(yt, 'YouTube');\nif (er) pb.push(er);\nelse {\n  const v = (yt.items || []).find(i => parisDate(i.contentDetails?.videoPublishedAt || i.snippet?.publishedAt) === today);\n  v ? ok.push(`YouTube : ${e(v.snippet?.title)}`) : pb.push('❌ YouTube : aucune vidéo publiée aujourd\\'hui sur la chaîne Muz Rappel');\n}\n// --- Stories du jour (contrôle du soir)\nif (moment === 'soir') {\n  const n = cfg.stories_attendues;\n  const igs = get('IG · Stories');\n  er = apiErr(igs, 'Instagram stories');\n  if (er) pb.push(er);\n  else {\n    const c = (igs.data || []).filter(s => parisDate(s.timestamp) === today).length;\n    c >= n ? ok.push(`Instagram : ${c} stories aujourd'hui`) : pb.push(`❌ Instagram : ${c}/${n} stories aujourd'hui (09h Reel, 13h question, 20h réponse)`);\n  }\n  const fbs = get('FB · Stories');\n  er = apiErr(fbs, 'Facebook stories');\n  if (er) pb.push(er);\n  else {\n    const c = (fbs.data || []).filter(s => parisDate(s.creation_time ?? s.created_time) === today).length;\n    c >= n ? ok.push(`Facebook : ${c} stories aujourd'hui`) : pb.push(`❌ Facebook : ${c}/${n} stories aujourd'hui (09h Reel, 13h question, 20h réponse)`);\n  }\n}\n// --- Stock de scripts\nconst db = get('BD · Stock');\nif (db.restant == null) pb.push('⚠️ Base favima_bdd : lecture du stock impossible');\nelse if (Number(db.restant) < cfg.seuil_stock) pb.push(`⚠️ Stock : plus que ${db.restant} script(s) prêt(s) à rendre (script_create=1, video_create=0)`);\nelse ok.push(`Stock : ${db.restant} scripts prêts`);\n\nconst titre = pb.length ? `🚨 <b>Muzrappel — ${pb.length} problème(s)</b>` : '✅ <b>Muzrappel — tout est OK</b>';\nconst texte = `${titre} (${moment}, ${now.toFormat('dd/MM HH:mm')})\\n\\n` + [...pb, ...(pb.length && !test ? [] : ok.map(x => '✔️ ' + x))].join('\\n');\nreturn [{ json: { envoyer: pb.length > 0 || test, problemes: pb.length, texte: texte.slice(0, 4000), chat_id: cfg.chat_id } }];\n"
+      },
+      "id": "95fa8d2c-179b-5859-b2c8-69f868c40698",
+      "name": "Évaluer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "6028b8f3-5bbb-57ae-9f59-4d566b441c3b",
+              "leftValue": "={{ $json.envoyer }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b0b2f6bc-abe0-54e9-acae-30a83eb281db",
+      "name": "Envoyer ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "108a4447-0236-5d92-8bc2-270d4ae1a5b1",
+      "name": "Alerte Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        0
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TnA0UuhJFPlr5QZu",
+          "name": "Telegram - muzrappelbot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Planifié": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test manuel": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "IG · Publications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Publications": {
+      "main": [
+        [
+          {
+            "node": "IG · Stories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Stories": {
+      "main": [
+        [
+          {
+            "node": "FB · Vidéos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB · Vidéos": {
+      "main": [
+        [
+          {
+            "node": "FB · Stories",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB · Stories": {
+      "main": [
+        [
+          {
+            "node": "YT · Chaîne",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YT · Chaîne": {
+      "main": [
+        [
+          {
+            "node": "YT · Dernières vidéos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YT · Dernières vidéos": {
+      "main": [
+        [
+          {
+            "node": "BD · Stock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BD · Stock": {
+      "main": [
+        [
+          {
+            "node": "Évaluer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Évaluer": {
+      "main": [
+        [
+          {
+            "node": "Envoyer ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer ?": {
+      "main": [
+        [
+          {
+            "node": "Alerte Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris",
+    "errorWorkflow": "eUErVpA15sgk6j1m",
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

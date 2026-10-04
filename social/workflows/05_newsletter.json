@@ -1,0 +1,643 @@
+{
+  "id": "VbNewsletterHeb1",
+  "name": "VocaBag - Newsletter hebdo",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * 0"
+            }
+          ]
+        }
+      },
+      "id": "6a40a4cd-f37b-5c4b-aeb0-a266661da770",
+      "name": "Chaque dimanche",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vb-newsletter-test",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "b627c845-dd41-5af3-9726-2ff42553dc44",
+      "name": "Test",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VbMediaToken0001",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "webhookId": "ef492b1e-3290-5bf3-92d7-e314e2794882"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CONFIGURATION de ce workflow — modifier ici. Les secrets restent dans les credentials n8n.\nreturn [{ json: {\n  // --- Telegram : seul ce chat peut piloter le bot et reçoit les messages\n  telegram_chat_id: '6980427615',\n\n  // --- Service média local (conversion, rendu HTML→image, hébergement public, blog)\n  media_service: 'http://host.docker.internal:8791',\n\n  // --- Newsletter hebdo (abonnés : table newsletter_subscribers de vocabag.com). Jour et heure : déclencheur\n  //     « Chaque dimanche ». Rien n'est envoyé s'il n'y a ni nouvel article ni vidéo sur la période.\n  newsletter: {\n    expediteur: 'VocaBag <contact.vocabag@gmail.com>',\n    email_test: 'contact.secbec@gmail.com',   // seul destinataire du déclencheur « Test »\n    jours: 7,                   // période couverte (articles et vidéos)\n    max_videos: 7,\n    site: 'https://vocabag.com',\n    desinscription: 'https://vocabag.com/unsubscribe.php?token=',\n  },\n} }];\n"
+      },
+      "id": "da1f8544-21d7-5ee9-8225-307befb11875",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Une seule newsletter par semaine ISO en production (un 2e déclenchement la même semaine ne fait rien).\nconst cfg = $('Config').first().json;\nconst test = $('Test').isExecuted;\nconst d = new Date(new Date().toLocaleString('en-US', { timeZone: 'Europe/Paris' }));\nconst t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));\nt.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));\nconst sem = Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);\nconst semaine = `${t.getUTCFullYear()}-S${String(sem).padStart(2, '0')}`;\nif (!test && $getWorkflowStaticData('global').derniere_semaine === semaine) return [];\nreturn [{ json: { test, semaine, jours: cfg.newsletter.jours, max_videos: cfg.newsletter.max_videos } }];\n"
+      },
+      "id": "19f63cd9-61dd-559c-abcb-41e2747538ae",
+      "name": "Préparer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.media_service }}/blog/recents",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ jours: $json.jours }) }}"
+      },
+      "id": "8ad1fc35-ac94-5512-b9ea-464388d6a647",
+      "name": "Articles récents",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VbMediaToken0001",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {},
+        "query": "=SELECT id, genre, language_id_a, language_id_b, word_ids, youtube_video_id FROM vocabag_videos WHERE posted_on_youtube = 1 AND youtube_video_id IS NOT NULL AND posted_youtube_at >= NOW() - INTERVAL {{ Number($('Préparer').first().json.jours) }} DAY ORDER BY posted_youtube_at DESC LIMIT {{ Number($('Préparer').first().json.max_videos) }}"
+      },
+      "id": "f20d78cb-e471-5e2d-8503-3db10a7c8208",
+      "name": "Vidéos de la semaine",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "qZ2NnMkubbTE5fNX",
+          "name": "Vocabag DB"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const ids = [...new Set($('Vidéos de la semaine').all().flatMap(i => {\n  try { return JSON.parse(i.json.word_ids || '[]'); } catch { return []; }\n}).map(Number).filter(n => Number.isInteger(n) && n > 0))];\nconst sql = ids.length\n  ? `SELECT v.id, v.word, v.transliteration, t.translation FROM vocabulary v\n     LEFT JOIN vocabulary_translations t ON t.vocabulary_id = v.id AND t.target_locale = 'fr'\n     WHERE v.id IN (${ids.join(',')})`\n  : 'SELECT NULL AS id FROM DUAL WHERE 1 = 0';\nreturn [{ json: { sql } }];\n"
+      },
+      "id": "ef598282-d60e-5006-8bd4-aff1f453dfa2",
+      "name": "Requête mots",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "d3cb31a9-d308-5760-92c0-6f84aa221f20",
+      "name": "Mots",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        1320,
+        0
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "qZ2NnMkubbTE5fNX",
+          "name": "Vocabag DB"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst cfg = $('Config').first().json.newsletter;\nconst p = $('Préparer').first().json;\nconst utm = `utm_source=newsletter&utm_medium=email&utm_campaign=hebdo-${p.semaine}`;\nconst lien = (url) => url + (url.includes('?') ? '&' : '?') + utm;\nconst articles = ($('Articles récents').first().json.articles || []);\nconst mots = Object.fromEntries($('Mots').all().map(i => i.json).filter(m => m.id).map(m => [Number(m.id), m]));\nconst L = { 1: ['darija', '🇲🇦'], 2: ['arabe littéraire', '🇸🇦'], 3: ['anglais', '🇬🇧'], 4: ['allemand', '🇩🇪'],\n  5: ['espagnol', '🇪🇸'], 6: ['portugais', '🇧🇷'], 7: ['italien', '🇮🇹'], 8: ['néerlandais', '🇳🇱'], 9: ['russe', '🇷🇺'],\n  10: ['turc', '🇹🇷'], 11: ['chinois', '🇨🇳'], 12: ['coréen', '🇰🇷'] };\nconst videos = $('Vidéos de la semaine').all().map(i => i.json).filter(v => v.youtube_video_id).map(v => {\n  const a = L[v.language_id_a] || ['?', ''], b = L[v.language_id_b];\n  const titre = v.genre === 'duel' && b ? `${a[0]} vs ${b[0]} ${a[1]}${b[1]}`\n              : v.genre === 'phrase' ? `Mots et phrases en ${a[0]} ${a[1]}` : `3 mots en ${a[0]} ${a[1]}`;\n  let ids = []; try { ids = JSON.parse(v.word_ids || '[]'); } catch {}\n  return { titre: titre.charAt(0).toUpperCase() + titre.slice(1), url: `https://www.youtube.com/shorts/${v.youtube_video_id}`,\n           mots: ids.map(id => mots[Number(id)]).filter(Boolean) };\n});\nif (!articles.length && !videos.length) return [{ json: { vide: true } }];\n\nconst h2 = t => `<h2 style=\"font-size:18px;color:#1a1a2e;margin:32px 0 12px\">${t}</h2>`;\nconst blocArticles = articles.map(a => `\n  <a href=\"${e(lien(cfg.site + '/blog/' + a.slug))}\" style=\"display:block;text-decoration:none;border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin:0 0 10px\">\n    ${a.category ? `<div style=\"font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#0d9488\">${e(a.category)}</div>` : ''}\n    <div style=\"font-size:16px;font-weight:700;color:#1a1a2e;margin:2px 0 4px\">${e(a.title)}</div>\n    <div style=\"font-size:14px;color:#555;line-height:1.5\">${e(a.description)}</div>\n  </a>`).join('');\nconst blocVideos = videos.map(v => `\n  <div style=\"border:1px solid #e5e7eb;border-radius:12px;padding:14px 16px;margin:0 0 10px\">\n    <div style=\"font-size:16px;font-weight:700;color:#1a1a2e;margin:0 0 6px\">${e(v.titre)}</div>\n    ${v.mots.map(m => `<div style=\"font-size:14px;color:#333;line-height:1.6\"><b>${e(m.word)}</b>${m.transliteration ? ` <span style=\"color:#888\">(${e(m.transliteration)})</span>` : ''}${m.translation ? ` — ${e(m.translation)}` : ''}</div>`).join('')}\n    <a href=\"${e(v.url)}\" style=\"display:inline-block;margin-top:8px;font-size:14px;color:#0d9488;font-weight:600\">▶ Regarder la vidéo</a>\n  </div>`).join('');\nconst intro = [articles.length ? `${articles.length} nouvel${articles.length > 1 ? 's' : ''} article${articles.length > 1 ? 's' : ''}` : '',\n               videos.length ? `${videos.length} vidéo${videos.length > 1 ? 's' : ''} de vocabulaire` : ''].filter(Boolean).join(' et ');\nconst html = `<!DOCTYPE html><html lang=\"fr\"><head><meta charset=\"UTF-8\"></head>\n<body style=\"font-family:system-ui,-apple-system,sans-serif;background:#f4f6f8;margin:0;padding:20px\">\n<div style=\"max-width:560px;margin:0 auto;background:#fff;border-radius:16px;padding:32px;box-shadow:0 2px 20px rgba(0,0,0,.07)\">\n  <div style=\"font-size:32px\">🎒</div>\n  <h1 style=\"color:#1a1a2e;font-size:22px;margin:8px 0 8px\">Votre semaine de vocabulaire</h1>\n  <p style=\"color:#555;line-height:1.6;margin:0\">Au programme cette semaine : ${e(intro)}.</p>\n  ${articles.length ? h2('📚 Nouveau sur le blog') + blocArticles : ''}\n  ${videos.length ? h2('🎬 Les vidéos de la semaine') + blocVideos : ''}\n  <div style=\"text-align:center;margin:32px 0 8px\">\n    <a href=\"${e(lien(cfg.site + '/'))}\" style=\"display:inline-block;background:#2dd4bf;color:#fff;text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:600;font-size:15px\">Réviser ces mots sur VocaBag →</a>\n  </div>\n  <p style=\"margin-top:24px;font-size:12px;color:#999;line-height:1.5\">\n    Vous recevez cet e-mail suite à votre inscription à la newsletter sur vocabag.com.<br>\n    <a href=\"%%DESINSCRIPTION%%\" style=\"color:#999\">Se désinscrire</a> · <a href=\"${e(cfg.site)}/confidentialite\" style=\"color:#999\">Confidentialité</a>\n  </p>\n</div></body></html>`;\nconst sujet = articles.length ? `🎒 ${articles[0].title}` : `🎒 Vos ${videos.length} vidéos de vocabulaire de la semaine`;\nreturn [{ json: { vide: false, sujet, html, nb_articles: articles.length, nb_videos: videos.length } }];\n"
+      },
+      "id": "a7978426-a065-5849-aeae-a1319a3e192e",
+      "name": "Composer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f2773466-578d-4f4f-adc4-d47902cf309c",
+              "leftValue": "={{ $json.vide !== true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "12c82e85-4365-556e-982f-bbaa5607fe7a",
+      "name": "Contenu ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "9745e710-2aef-4192-a025-eafe7d5c5c53",
+              "leftValue": "={{ $('Préparer').first().json.test }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f216c339-df23-5398-8ec6-4e88327b0451",
+      "name": "Mode test ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { email: $('Config').first().json.newsletter.email_test, unsubscribe_token: 'test' } }];\n"
+      },
+      "id": "bc99595b-28a7-5a20-a07c-8596d6643669",
+      "name": "Destinataire test",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {},
+        "query": "SELECT email, unsubscribe_token FROM newsletter_subscribers WHERE unsubscribed_at IS NULL ORDER BY id"
+      },
+      "id": "f722a82e-07a5-56fd-a15a-81947813943a",
+      "name": "Abonnés",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        2200,
+        0
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "qZ2NnMkubbTE5fNX",
+          "name": "Vocabag DB"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('Composer').first().json;\nconst cfg = $('Config').first().json.newsletter;\nconst test = $('Préparer').first().json.test;\nconst out = $input.all().map(i => i.json).filter(a => a.email && a.unsubscribe_token).map(a => ({ json: {\n  email: a.email, sujet: (test ? '[TEST] ' : '') + c.sujet,\n  html: c.html.replace('%%DESINSCRIPTION%%', cfg.desinscription + encodeURIComponent(a.unsubscribe_token)),\n} }));\nreturn out.length ? out : [{ json: { email: '' } }];\n"
+      },
+      "id": "78fc4fba-2f69-505c-b534-c6129c013204",
+      "name": "Personnaliser",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "6f61f632-0610-43a8-9402-ecc96a42de36",
+              "leftValue": "={{ !!$json.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ccbb214b-de5a-541f-a419-31f89904d42c",
+      "name": "À envoyer ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Config').first().json.newsletter.expediteur }}",
+        "toEmail": "={{ $json.email }}",
+        "subject": "={{ $json.sujet }}",
+        "emailFormat": "html",
+        "html": "={{ $json.html }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "f623d10a-0336-50de-b001-8f12ca29a987",
+      "name": "Envoyer",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        2860,
+        -200
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "VbSmtpGmail00001",
+          "name": "Gmail - contact.vocabag (SMTP)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst p = $('Préparer').first().json;\nconst c = $('Composer').first().json;\nconst dest = $('Personnaliser').all().filter(i => i.json.email).length;\nconst res = $('Envoyer').isExecuted ? $('Envoyer').all().map(i => i.json) : [];\nconst ko = res.filter(r => r.error).length;\nif (!p.test) $getWorkflowStaticData('global').derniere_semaine = p.semaine;\nconst texte = `📧 Newsletter ${p.test ? '<b>[TEST]</b> ' : ''}${e(p.semaine)} : ${res.length - ko}/${dest} envoyée(s)`\n  + (ko ? ` · ⚠️ ${ko} échec(s) : ${e(res.find(r => r.error).error.message || '')}` : '')\n  + `\\n${c.nb_articles} article(s), ${c.nb_videos} vidéo(s) · « ${e(c.sujet)} »`;\nreturn [{ json: { texte } }];\n"
+      },
+      "id": "ad08e47b-ce3b-5edc-8b48-de982fef62b9",
+      "name": "Bilan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3080,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "cf911948-5f35-5cc1-8ac3-1a920d29c417",
+      "name": "Bilan Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3300,
+        -100
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "=📧 Newsletter {{ $('Préparer').first().json.semaine }} : ni article ni vidéo sur la période, pas d'envoi.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "1c793841-1bf4-56ed-9649-2fba89865bf7",
+      "name": "Rien à envoyer",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1980,
+        200
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Chaque dimanche": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Préparer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer": {
+      "main": [
+        [
+          {
+            "node": "Articles récents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Articles récents": {
+      "main": [
+        [
+          {
+            "node": "Vidéos de la semaine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vidéos de la semaine": {
+      "main": [
+        [
+          {
+            "node": "Requête mots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requête mots": {
+      "main": [
+        [
+          {
+            "node": "Mots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mots": {
+      "main": [
+        [
+          {
+            "node": "Composer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Composer": {
+      "main": [
+        [
+          {
+            "node": "Contenu ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contenu ?": {
+      "main": [
+        [
+          {
+            "node": "Mode test ?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rien à envoyer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mode test ?": {
+      "main": [
+        [
+          {
+            "node": "Destinataire test",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Abonnés",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Destinataire test": {
+      "main": [
+        [
+          {
+            "node": "Personnaliser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Abonnés": {
+      "main": [
+        [
+          {
+            "node": "Personnaliser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Personnaliser": {
+      "main": [
+        [
+          {
+            "node": "À envoyer ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "À envoyer ?": {
+      "main": [
+        [
+          {
+            "node": "Envoyer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Bilan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer": {
+      "main": [
+        [
+          {
+            "node": "Bilan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bilan": {
+      "main": [
+        [
+          {
+            "node": "Bilan Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "VbErreursAlerte1"
+  },
+  "pinData": {},
+  "tags": []
+}

@@ -1,0 +1,3207 @@
+{
+  "id": "VbSocialCarrous1",
+  "name": "VocaBag Social - Carrousel Telegram",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message",
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "id": "d896eb01-ea41-5472-a7bd-6c1276c0a10e",
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "webhookId": "0fe6cf63-a03f-50b5-aff7-e036ebf92ce0"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CONFIGURATION de ce workflow — modifier ici. Les secrets restent dans les credentials n8n.\nreturn [{ json: {\n  // --- Telegram : seul ce chat peut piloter le bot et reçoit les messages\n  telegram_chat_id: '6980427615',\n\n  // --- Instagram (API Instagram avec connexion Instagram : jeton « IG… », graph.instagram.com)\n  ig_api: 'https://graph.instagram.com/v23.0',\n  max_carrousel: 10,          // limite actuelle de l'API (documentation Content Publishing)\n  min_carrousel: 2,\n  poll_max: 60,               // vérifications du statut du conteneur (x poll_attente_s)\n  poll_attente_s: 5,\n\n  // --- Service média local (conversion, rendu HTML→image, hébergement public, blog)\n  media_service: 'http://host.docker.internal:8791',\n\n  // --- Carrousel Telegram\n  ratio_policy: 'pad',        // 'pad' = image hors 4:5…1.91:1 complétée de blanc ; 'none' = envoyée telle quelle\n  album_attente_s: 10,        // silence après la dernière photo d'un album avant traitement\n  langue_description_defaut: 'fr',\n  langues_description: ['fr', 'en', 'ar', 'es', 'de', 'it', 'pt', 'nl'],\n  exclusions: { textes: 5, ctas: 3, hashtags: 3 },   // tirage : on exclut les X dernières lignes utilisées\n  blog_actif: true,           // false = les carrousels ne sont plus mis en file pour le blog\n  detection_langues: true,    // légende sans langue → Claude lit les images et en déduit 1 langue (ou 2 = duel)\n  detection_modele: 'haiku',  // modèle Claude Code de la détection (léger : ~10 s, peu de quota)\n  lien_pinterest: 'https://vocabag.com/?utm_source=pinterest&utm_medium=pin',\n  pinterest: { actif: false, board_id: '', api: 'https://api.pinterest.com/v5' },   // prêt, désactivé\n\n  // --- Langues apprises : code VocaBag ⇄ noms acceptés dans la légende Telegram / les tables\n  langues: {\n    ary: { nom: 'darija',            drapeau: '🇲🇦', alias: ['ary', 'darija', 'marocain', 'moroccan'] },\n    ar:  { nom: 'arabe littéraire',  drapeau: '🇸🇦', alias: ['ar', 'arabe', 'arabic', 'msa', 'fusha'] },\n    zh:  { nom: 'chinois',           drapeau: '🇨🇳', alias: ['zh', 'chinois', 'chinese', 'mandarin'] },\n    en:  { nom: 'anglais',           drapeau: '🇬🇧', alias: ['en', 'anglais', 'english'] },\n    de:  { nom: 'allemand',          drapeau: '🇩🇪', alias: ['de', 'allemand', 'german'] },\n    es:  { nom: 'espagnol',          drapeau: '🇪🇸', alias: ['es', 'espagnol', 'spanish'] },\n    pt:  { nom: 'portugais',         drapeau: '🇧🇷', alias: ['pt', 'portugais', 'portuguese'] },\n    it:  { nom: 'italien',           drapeau: '🇮🇹', alias: ['it', 'italien', 'italian'] },\n    nl:  { nom: 'néerlandais',       drapeau: '🇳🇱', alias: ['nl', 'neerlandais', 'néerlandais', 'dutch'] },\n    ru:  { nom: 'russe',             drapeau: '🇷🇺', alias: ['ru', 'russe', 'russian'] },\n    tr:  { nom: 'turc',              drapeau: '🇹🇷', alias: ['tr', 'turc', 'turkish'] },\n    ko:  { nom: 'coréen',            drapeau: '🇰🇷', alias: ['ko', 'coreen', 'coréen', 'korean'] },\n  },\n} }];\n"
+      },
+      "id": "7a826562-cbab-5287-85d3-4c12acde1c66",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Seul le chat configuré est accepté ; tout autre expéditeur est ignoré sans réponse.\nconst cfg = $('Config').first().json;\n// Boutons des brouillons de blog (« blog:pub|rej|redo:<id> ») → sous-workflow « Blog Décision ».\nconst cq = $('Telegram').first().json.callback_query;\nif (cq) {\n  if (String(cq.message?.chat?.id) !== String(cfg.telegram_chat_id)) return [];\n  const b = /^blog:(pub|rej|redo):(c\\d{8}-[0-9a-f]{6})$/.exec(cq.data || '');\n  if (!b) return [];\n  return [{ json: { action: 'blog', decision: b[1], id: b[2], callback_query_id: cq.id,\n                    chat_id: String(cq.message.chat.id), message_id: cq.message.message_id } }];\n}\nconst m = $('Telegram').first().json.message || {};\nif (String(m.chat?.id) !== String(cfg.telegram_chat_id)) return [];\nlet file_id = null, kind = null;\nif (m.photo?.length) {            // la plus grande résolution proposée par Telegram\n  file_id = [...m.photo].sort((a, b) => b.width * b.height - a.width * a.height)[0].file_id; kind = 'photo';\n} else if (m.document && /^image\\//.test(m.document.mime_type || '')) {   // envoyé « en fichier » : qualité d'origine\n  file_id = m.document.file_id; kind = 'document';\n}\nif (!file_id) return [{ json: { action: 'aide' } }];\nreturn [{ json: {\n  action: 'image', message_id: m.message_id, media_group_id: m.media_group_id ? String(m.media_group_id) : '',\n  file_id, kind, caption: m.caption || '', recu_le: new Date().toISOString(),\n} }];\n"
+      },
+      "id": "6b848cb4-25f0-52f9-b64d-7791a799e195",
+      "name": "Filtrer message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "2151d414-51f5-486b-a71d-f98d14ba6bd3",
+              "leftValue": "={{ $json.action === 'blog' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "73332554-3cb3-5146-bf0f-9d1ac27b9437",
+      "name": "Bouton blog ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        550,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "source": "database",
+        "workflowId": {
+          "__rl": true,
+          "value": "VbSocialBlog0001",
+          "mode": "id"
+        },
+        "mode": "once",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "64b540df-c220-58d7-ba9b-9eb02b8ce36e",
+      "name": "Décision blog",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        770,
+        -350
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "db2a4467-3e8e-44ed-b251-cec2284155c0",
+              "leftValue": "={{ $json.action === 'image' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d1c732a6-c2dd-59dd-baa6-4afbbaefad37",
+      "name": "Image ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "=📸 Envoie 1 photo (post) ou un album de 2 à {{ $('Config').first().json.max_carrousel }} photos (carrousel).\nLégende du 1er message :\n<code>fr darija</code> (langue de la description + langue apprise, défaut : fr)\n<code>ar vs darija</code> ou <code>fr ar vs darija</code> : duel de deux langues\nSans langue apprise : je la déduis des images.\n<code>desc: ton texte</code> pour imposer la description (CTA et hashtags restent tirés).\nAstuce : envoie les images « en fichier » pour garder la qualité d'origine.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "e344047d-b92d-5c68-a04c-c60aa3cc63a2",
+      "name": "Aide",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        150
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e5159653-b5df-4991-b77a-437e3a90f6fa",
+              "leftValue": "={{ $json.media_group_id !== '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7f10aa62-30b3-5a09-b3cd-c43723019246",
+      "name": "Album ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_tampon_album"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "media_group_id": "={{ $json.media_group_id }}",
+            "message_id": "={{ $json.message_id }}",
+            "file_id": "={{ $json.file_id }}",
+            "kind": "={{ $json.kind }}",
+            "caption": "={{ $json.caption }}",
+            "recu_le": "={{ $json.recu_le }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "media_group_id",
+              "displayName": "media_group_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "file_id",
+              "displayName": "file_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "kind",
+              "displayName": "kind",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "caption",
+              "displayName": "caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "recu_le",
+              "displayName": "recu_le",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a26defe8-3846-5fca-b942-9e96d8774621",
+      "name": "Mettre en tampon",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('Config').first().json.album_attente_s }}",
+        "unit": "seconds"
+      },
+      "id": "eeb8827a-42f5-5ffd-9195-251d2157a431",
+      "name": "Attendre fin d'album",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        -200
+      ],
+      "webhookId": "49f60e8b-3c84-5c54-a099-9205e358eadb"
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_tampon_album"
+        },
+        "returnAll": true,
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "media_group_id",
+              "condition": "eq",
+              "keyValue": "={{ $('Filtrer message').first().json.media_group_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6aa0cace-98ee-5688-be2c-90cc3fa6d4ee",
+      "name": "Lire album",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        -200
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Chaque photo de l'album a déclenché sa propre exécution. Seule celle de la DERNIÈRE photo reçue\n// traite l'album (les autres s'arrêtent) ; comme elle a attendu album_attente_s après son arrivée,\n// l'album est complet.\nconst moi = $('Filtrer message').first().json;\nconst rows = $input.all().map(i => i.json).filter(r => r.file_id)\n  .sort((a, b) => Number(a.message_id) - Number(b.message_id));\nif (!rows.length) return [];\nif (Number(rows[rows.length - 1].message_id) !== Number(moi.message_id)) return [];\nconst vus = new Set();\nconst images = rows.filter(r => !vus.has(r.file_id) && vus.add(r.file_id))\n  .map(r => ({ file_id: r.file_id, kind: r.kind, message_id: Number(r.message_id) }));\nreturn [{ json: { images, caption: (rows.find(r => String(r.caption || '').trim()) || {}).caption || '',\n                  media_group_id: moi.media_group_id, source_ref: 'tg-album-' + moi.media_group_id } }];\n"
+      },
+      "id": "ecae4daa-4574-5e69-b942-a7b4a8186d18",
+      "name": "Dernière photo ?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const m = $('Filtrer message').first().json;\nreturn [{ json: { images: [{ file_id: m.file_id, kind: m.kind, message_id: m.message_id }], caption: m.caption,\n                  media_group_id: '', source_ref: 'tg-msg-' + m.message_id } }];\n"
+      },
+      "id": "1d817839-c652-5acc-a7d0-f185434fbee2",
+      "name": "Photo seule",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const normLangue = (cfg, v) => {\n  const s = String(v ?? '').trim().toLowerCase();\n  if (!s) return '';\n  for (const [code, l] of Object.entries(cfg.langues)) if (code === s || l.alias.includes(s)) return code;\n  return null; // inconnue\n};\n// 1re ligne non vide : « langue_description langue_apprise » (ex. « fr darija », « en chinois »),\n// ou un DUEL de deux langues avec « vs » (ou / ou +) : « ar vs darija », « fr ar vs darija »,\n// comme le genre « duel » de Vocabag Video. Sans « vs », « ar darija » = description en arabe + darija.\n// Une ligne « desc: … » (et tout ce qui suit) remplace le texte tiré de la table.\nconst cfg = $('Config').first().json;\nconst d = $json;\nconst lignes = String(d.caption || '').split(/\\r?\\n/);\nconst iDesc = lignes.findIndex(l => /^\\s*desc\\s*:/i.test(l));\nconst desc_perso = iDesc >= 0 ? [lignes[iDesc].replace(/^\\s*desc\\s*:/i, ''), ...lignes.slice(iDesc + 1)].join('\\n').trim() : '';\nconst params = (iDesc >= 0 ? lignes.slice(0, iDesc) : lignes).map(l => l.trim()).find(Boolean) || '';\nconst mots = params.toLowerCase().replace(/\\s*[\\/+]\\s*/g, ' vs ').split(/\\s+/).filter(Boolean);\nconst avert = [];\nlet langue_description = cfg.langue_description_defaut;\nconst bruts = [];\nconst iVs = mots.findIndex(m => m === 'vs' || m === 'versus');\nif (iVs >= 0) {\n  const gauche = mots.slice(0, iVs), droite = mots.slice(iVs + 1);\n  if (gauche.length >= 2 && cfg.langues_description.includes(gauche[0])) langue_description = gauche.shift();\n  bruts.push(gauche.join(' '), droite.join(' '));\n} else {\n  if (mots.length >= 2 && cfg.langues_description.includes(mots[0])) langue_description = mots.shift();\n  // « fr » seul : langue de description (pas une langue apprise) → langue apprise à déduire des images\n  else if (mots.length === 1 && cfg.langues_description.includes(mots[0]) && !normLangue(cfg, mots[0])) langue_description = mots.shift();\n  if (mots.length) bruts.push(mots.join(' '));\n}\nconst langues_apprises = [];\nfor (const brut of bruts) {\n  const code = brut ? normLangue(cfg, brut) : null;\n  if (code && !langues_apprises.includes(code)) langues_apprises.push(code);\n  else if (!code) avert.push(`langue apprise « ${brut || '(vide)'} » inconnue → ignorée`);\n}\nif (bruts.length === 2 && langues_apprises.length < 2) avert.push('duel incomplet → description pour une seule langue');\nconst langue_apprise = langues_apprises[0] || '';\nconst n = d.images.length;\nconst type = n === 1 ? 'post' : 'carrousel';\nconst refus = n > cfg.max_carrousel ? `${n} images reçues : l'API Instagram accepte ${cfg.max_carrousel} images maximum par carrousel. Rien n'a été publié.` : '';\nreturn [{ json: { ...d, type, langue_description, langue_apprise, langues_apprises, desc_perso, avertissements: avert, refus } }];\n"
+      },
+      "id": "899f4014-034a-55b0-80fc-7cdc2ff179af",
+      "name": "Analyser légende",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "378e086e-5387-49b4-8491-aa6ff51262e5",
+              "leftValue": "={{ !$json.refus }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cada5cd1-3284-5b04-80ed-432f5a331ae1",
+      "name": "Nombre OK ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "=⚠️ {{ $json.refus }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "2ed5c18d-b0b8-5d84-bac1-80b57a399369",
+      "name": "Refus",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        200
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_journal"
+        },
+        "returnAll": true,
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "source_ref",
+              "condition": "eq",
+              "keyValue": "={{ $json.source_ref }}"
+            },
+            {
+              "keyName": "statut",
+              "condition": "eq",
+              "keyValue": "ok"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fa49f278-6ff7-523d-8d88-80faf74a3f21",
+      "name": "Déjà publié ?",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2420,
+        -100
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Anti-doublon : un album / message déjà publié n'est jamais republié.\nif ($input.all().some(i => i.json.post_id)) return [];\nconst a = $('Analyser légende').first().json;\nreturn a.images.map((img, i) => ({ json: { ...img, idx: i } }));\n"
+      },
+      "id": "2a2bf88f-83a3-5f7f-a84d-eb598d12ba11",
+      "name": "Une ligne par image",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2640,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "fileId": "={{ $json.file_id }}",
+        "download": true,
+        "additionalFields": {}
+      },
+      "id": "1cbc2d85-d9b2-5f7c-b419-b1d36c5de525",
+      "name": "Télécharger image",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2860,
+        -100
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.media_service }}/ingest?ratio_policy={{ $('Config').first().json.ratio_policy }}",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data"
+      },
+      "id": "6d05cbbf-093c-5c1a-bfbc-1c97701c3b4b",
+      "name": "Héberger image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        -100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L2zYP3cEvAgZVffN",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ordre d'envoi conservé (idx). L'URL Telegram (qui contient le token du bot) n'est jamais transmise :\n// seule l'URL de notre hébergement public part vers Instagram.\nconst a = $('Analyser légende').first().json;\nconst res = $input.all().map((it, i) => ({ ...it.json, idx: i }));\nconst errs = res.filter(r => !r.url).map(r => `image ${r.idx + 1} : ${r.error?.message || r.error || 'échec hébergement'}`);\nconst avert = [...a.avertissements];\nres.forEach(r => (r.warnings || []).forEach(w => avert.push(`image ${r.idx + 1} : ${w}`)));\nres.filter(r => r.converted).forEach(r => avert.push(`image ${r.idx + 1} convertie de ${r.source_format} en JPEG`));\nconst ratios = [...new Set(res.filter(r => r.ratio).map(r => r.ratio.toFixed(2)))];\nif (ratios.length > 1) avert.push(`ratios différents (${ratios.join(', ')}) : Instagram recadre tout le carrousel sur le ratio de la 1re image`);\nreturn [{ json: { ...a, images: res.map(r => r.url).filter(Boolean), avertissements: avert,\n                  erreur: errs.join(' | ') } }];\n"
+      },
+      "id": "c60bab17-dfa5-574a-9223-92f7d8483241",
+      "name": "Collecter images",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3300,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "86472114-c563-4f46-a775-1b0ce9d12492",
+              "leftValue": "={{ !$json.erreur }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2fb7aa16-74a4-5b50-afdf-a5208059959d",
+      "name": "Images OK ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "c0c881dd-a86a-4d55-b8bc-664ce89b7dd3",
+              "leftValue": "={{ !$json.langues_apprises.length && $('Config').first().json.detection_langues }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9eb97ba9-8544-5cc9-b4b9-6ff2b91e5079",
+      "name": "Détecter langue ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3630,
+        -450
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.media_service }}/detect-langues",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ images: $json.images, modele: $('Config').first().json.detection_modele }) }}"
+      },
+      "id": "2e4372d9-463c-5d63-b4b0-2bc839a99770",
+      "name": "Détecter langues",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3740,
+        -600
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L2zYP3cEvAgZVffN",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Résultat unique lu par la suite du workflow ($('Langues')) : images + légende + langue(s) finales.\nconst a = $('Collecter images').first().json;\nif (!$('Détecter langues').isExecuted) return [{ json: { ...a, note_langues: '' } }];\nconst d = $('Détecter langues').first().json;\nconst langues = d.ok ? (d.langues || []) : [];\nconst avert = [...a.avertissements];\nlet note = '';\nif (!d.ok) avert.push(`détection de la langue impossible (${d.error?.message || d.error || '?'}) → description générique`);\nelse if (!langues.length) avert.push('langue non reconnue sur les images → description générique (précise-la en légende)');\nelse note = `🔎 Langue${langues.length > 1 ? 's' : ''} déduite${langues.length > 1 ? 's' : ''} des images : ${langues.join(' vs ')} ` +\n            `(confiance ${d.confiance || '?'}${d.raison ? ' — ' + d.raison : ''})`;\nreturn [{ json: { ...a, langue_apprise: langues[0] || '', langues_apprises: langues, avertissements: avert, note_langues: note } }];\n"
+      },
+      "id": "2a6d0b85-1a26-5570-89f3-107d67d7eec1",
+      "name": "Langues",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        -450
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const a = $json;\nreturn [{ json: { langue_description: a.langue_description, langue_apprise: a.langue_apprise,\n                  langues_apprises: a.langues_apprises, desc_perso: a.desc_perso, type: a.type } }];\n"
+      },
+      "id": "f966575f-23be-50b4-a46a-ba5ca5b7e40c",
+      "name": "Demande description",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3740,
+        -200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "8ed25660-bc28-529a-8fbb-37f4efbc7ddf",
+      "name": "Tirer description",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3960,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "a17529c1-637a-4dc0-9d70-d714f97bcdb5",
+              "leftValue": "={{ $json.ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "59b07bee-3c49-5cbb-8c6c-161409c0dd93",
+      "name": "Description OK ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4180,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format commun des sous-workflows « Publier ».\nconst a = $('Langues').first().json;\nconst d = $json;\nreturn [{ json: {\n  type: a.type, images: a.images, video: '', texte: d.caption,\n  langue_description: a.langue_description, langue_apprise: a.langues_apprises.join('+'),   // journal : « ar+ary »\n  source: 'telegram', source_ref: a.source_ref,\n  desc_ids: { texte_id: d.desc_perso ? '' : d.texte_id, cta_id: d.cta_id, hashtags_id: d.hashtags_id },\n} }];\n"
+      },
+      "id": "0d9e983b-8a59-511a-a838-33ea3199b0a4",
+      "name": "Demande publication",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        -300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "ba52ff67-96da-53bb-8008-0e1ca5e081b9",
+      "name": "Publier Instagram",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4620,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst r = $json;\nconst a = $('Langues').first().json;\nconst demande = $('Demande publication').first().json;\nconst av = (a.note_langues ? '\\n\\n' + e(a.note_langues) : '')\n  + (a.avertissements.length ? '\\n\\n⚠️ ' + a.avertissements.map(e).join('\\n⚠️ ') : '');\nif (r.ok) {\n  return [{ json: { texte: `✅ ${a.type === 'post' ? 'Post' : 'Carrousel de ' + a.images.length + ' images'} publié\\n${e(r.permalink || r.post_id)}\\n\\n<b>Description utilisée :</b>\\n${e(demande.texte)}${av}` } }];\n}\nreturn [{ json: { texte: `❌ Publication Instagram échouée :\\n${e(r.erreur || r.error?.message || JSON.stringify(r))}${av}` } }];\n"
+      },
+      "id": "40f5bdc5-54cc-5eb6-b469-db600afbaf21",
+      "name": "Message retour",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4840,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "c42f1e7e-cff4-52bd-957e-a714f8f18096",
+      "name": "Répondre",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        5060,
+        -300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Même contenu vers le sous-workflow Pinterest (qui ne fait rien tant que pinterest.actif = false).\nif (!$('Publier Instagram').first().json.ok) return [];\nreturn [{ json: $('Demande publication').first().json }];\n"
+      },
+      "id": "011fcb9e-07a3-5481-9ad7-506feb6523f5",
+      "name": "Envoyer à Pinterest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5280,
+        -300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "212ccc33-5e83-5e06-b1a5-be46f53e2f1f",
+      "name": "Publier Pinterest",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        5500,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst j = $json;\nconst msg = j.erreur || j.error?.message || JSON.stringify(j).slice(0, 400);\nreturn [{ json: { texte: `❌ Rien n'a été publié :\\n${e(msg)}` } }];\n"
+      },
+      "id": "f99cd56f-488a-5b49-a203-5ce4bbadc277",
+      "name": "Erreur avant publication",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "69fde32a-0e9f-552b-8b81-0ae45f4e650d",
+      "name": "Signaler erreur",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4620,
+        100
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Un article de blog par publication Instagram (carrousel OU photo seule) ; rédigé le soir par le workflow Blog.\nconst cfg = $('Config').first().json;\nconst r = $('Publier Instagram').first().json;\nconst a = $('Langues').first().json;\nif (!cfg.blog_actif || !r.ok) return [];\nconst d = $('Demande publication').first().json;\nreturn [{ json: { source_ref: a.source_ref, images: a.images, langue_apprise: a.langue_apprise,\n                  langues_apprises: a.langues_apprises,\n                  langue_description: a.langue_description, caption: a.caption, texte: d.texte,\n                  permalink: r.permalink || '' } }];\n"
+      },
+      "id": "1c85a404-7d25-55c5-813f-900a2748095a",
+      "name": "Pour le blog ?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5280,
+        -500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.media_service }}/blog/enqueue",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "6169fcd3-5e4b-5970-9b77-2ab636ff6f30",
+      "name": "Mettre en file blog",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5500,
+        -500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L2zYP3cEvAgZVffN",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst j = $json;\nif (j.ok) return [];\nreturn [{ json: { texte: `⚠️ Carrousel publié, mais pas mis en file pour le blog :\\n${e(j.error?.message || j.error || JSON.stringify(j).slice(0, 300))}` } }];\n"
+      },
+      "id": "55fc267c-69d4-5813-b4f5-25e88f9d688e",
+      "name": "File blog OK ?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5720,
+        -500
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "dc3b953a-c723-536a-ad81-3680dff7227f",
+      "name": "Signaler file blog",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        5940,
+        -500
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const g = $('Analyser légende').first().json.media_group_id;\nreturn g ? [{ json: { media_group_id: g } }] : [];\n"
+      },
+      "id": "8cf3ef60-6723-5b8e-ba74-a71317eb3ccf",
+      "name": "Vider tampon ?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "deleteRows",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_tampon_album"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "media_group_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.media_group_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "54fe789b-29ab-510b-864b-4865bafac227",
+      "name": "Vider tampon",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5940,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "id": "ec373691-e288-5f8d-9de0-b9623dd46206",
+      "name": "Entrée · description",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3960,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_textes"
+        },
+        "returnAll": true,
+        "options": {}
+      },
+      "id": "1d911d6c-db6d-503f-8fc1-304adce11744",
+      "name": "Lire textes · description",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4400,
+        500
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_ctas"
+        },
+        "returnAll": true,
+        "options": {}
+      },
+      "id": "8d19dd4a-516f-5d38-9047-be11615c4554",
+      "name": "Lire CTA · description",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4620,
+        500
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_hashtags"
+        },
+        "returnAll": true,
+        "options": {}
+      },
+      "id": "389545c0-0a5b-51cb-b3bc-4b351b7e1649",
+      "name": "Lire hashtags · description",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4840,
+        500
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const normLangue = (cfg, v) => {\n  const s = String(v ?? '').trim().toLowerCase();\n  if (!s) return '';\n  for (const [code, l] of Object.entries(cfg.langues)) if (code === s || l.alias.includes(s)) return code;\n  return null; // inconnue\n};\n// Tirage aléatoire anti-répétition (règles de la spec) :\n//  - lignes de la langue de description ; parmi elles celles de la langue apprise si renseignée,\n//    sinon repli sur les lignes génériques (langue_apprise vide) ;\n//  - on exclut les X lignes utilisées le plus récemment (en gardant au moins 1 candidate).\nconst req = $('Entrée · description').first().json;\nconst cfg = $('Config').first().json;\nconst lang = String(req.langue_description || cfg.langue_description_defaut).toLowerCase();\n// Duel (2 langues, comme « Arabe vs Darija » dans Vocabag Video) : titre « A vs B », texte des lignes\n// langue_apprise = « duel » (sinon génériques), hashtags des DEUX langues réunis + #comparaisondelangues.\nconst apprs = [...new Set((req.langues_apprises?.length ? req.langues_apprises : [req.langue_apprise])\n  .map(v => normLangue(cfg, v)).filter(Boolean))].slice(0, 2);\nconst duel = apprs.length === 2;\nconst appr = apprs[0] || '';\nconst rows = noeud => noeud.all().map(i => i.json).filter(r => r && r.id !== undefined);\n\n// Colonne facultative « format » (vb_textes) : vide = tout format, sinon « post » (image seule) ou « carrousel ».\nconst typePub = String(req.type || '').trim().toLowerCase();\nconst bonFormat = r => { const f = String(r.format ?? '').trim().toLowerCase(); return !f || f === typePub; };\n\nfunction tirer(lignes, X, avecLangueApprise, cible = appr) {\n  const L = lignes.filter(r => String(r.langue_description || '').trim().toLowerCase() === lang && bonFormat(r));\n  let c = [];\n  if (avecLangueApprise && cible === 'duel') c = L.filter(r => String(r.langue_apprise || '').trim().toLowerCase() === 'duel');\n  else if (avecLangueApprise && cible) c = L.filter(r => normLangue(cfg, r.langue_apprise) === cible);\n  if (!c.length) c = avecLangueApprise ? L.filter(r => !String(r.langue_apprise || '').trim()) : L;\n  if (!c.length) return null;\n  const recents = [...c].filter(r => r.derniere_utilisation)\n    .sort((a, b) => String(b.derniere_utilisation).localeCompare(String(a.derniere_utilisation)))\n    .slice(0, Math.min(X, c.length - 1)).map(r => r.id);\n  const pool = c.filter(r => !recents.includes(r.id));\n  return pool[Math.floor(Math.random() * pool.length)];\n}\n\nconst perso = String(req.desc_perso || '').trim();\nconst texte = perso ? null : tirer(rows($('Lire textes · description')), cfg.exclusions.textes, true, duel ? 'duel' : appr);\nconst cta = tirer(rows($('Lire CTA · description')), cfg.exclusions.ctas, false);\nconst tags = tirer(rows($('Lire hashtags · description')), cfg.exclusions.hashtags, true);\nconst tagsB = duel ? tirer(rows($('Lire hashtags · description')), cfg.exclusions.hashtags, true, apprs[1]) : null;\n\nconst manque = [];\nif (!perso && !texte) manque.push('textes');\nif (!cta) manque.push('ctas');\nif (!tags) manque.push('hashtags');\nif (manque.length) {\n  return [{ json: { ok: false, erreur: `aucune ligne « ${lang} »${appr ? ' / ' + appr : ''} dans : ${manque.join(', ')}`,\n                    texte_id: -1, cta_id: -1, hashtags_id: -1 } }];\n}\n// Instagram : 30 hashtags max, on tronque proprement.\nconst brutTags = [tags, tagsB].filter(Boolean).map(t => String(t.hashtags)).join(' ') + (duel ? ' #comparaisondelangues' : '');\nconst hashtags = [...new Set(brutTags.match(/#[^\\s#]+/g) || [])].slice(0, 30).join(' ');\nlet titre = '';\nif (duel && !perso) {\n  const [a, b] = apprs.map(c => cfg.langues[c]);\n  const nom = l => l.nom.charAt(0).toUpperCase() + l.nom.slice(1);\n  titre = lang === 'fr' ? `${nom(a)} vs ${nom(b)} ${a.drapeau}${b.drapeau}` : `${a.drapeau} vs ${b.drapeau}`;\n}\n// Aucune invitation à faire défiler (« Swipe 👉 ») : retirée des textes tirés, carrousel comme image seule (2026-09-28).\nconst sansSwipe = t => t.replace(/[ \\t]*\\b(swipe|glisse|fais défiler)\\b[^.!?\\n]*[.!?]?[ \\t]*(👉)?/gi, '')\n  .split('\\n').map(l => l.trimEnd()).filter((l, i, arr) => l || (i > 0 && arr[i - 1])).join('\\n').trim();\nlet corps = perso || String(texte.texte).trim();\nif (!perso) corps = sansSwipe(corps) || corps;\nconst caption = [titre, corps, String(cta.texte).trim(), hashtags].filter(Boolean).join('\\n\\n');\nreturn [{ json: {\n  ok: true, caption,\n  texte_id: texte ? texte.id : -1, cta_id: cta.id, hashtags_id: tags.id,\n  desc_perso: !!perso, langue_description: lang, langue_apprise: apprs.join('+'), duel,\n  maintenant: new Date().toISOString(),\n} }];\n"
+      },
+      "id": "1b777435-60ff-5b15-82e4-1adec762db34",
+      "name": "Tirer · description",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5060,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "ba4074f4-c523-4e5f-90c4-6e6eddf6c6fc",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "05d263fc-a80b-56f5-a736-c56c2aafef9f",
+      "name": "Tirage OK ? · description",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5280,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_textes"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Tirer · description').first().json.texte_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "derniere_utilisation": "={{ $('Tirer · description').first().json.maintenant }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "derniere_utilisation",
+              "displayName": "derniere_utilisation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "273550f6-02cd-55da-9e90-1f95b3f67e96",
+      "name": "Marquer texte · description",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5500,
+        400
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_ctas"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Tirer · description').first().json.cta_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "derniere_utilisation": "={{ $('Tirer · description').first().json.maintenant }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "derniere_utilisation",
+              "displayName": "derniere_utilisation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "db82f8d7-0e97-5af1-b29c-42c7070006dd",
+      "name": "Marquer CTA · description",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5720,
+        400
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_hashtags"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('Tirer · description').first().json.hashtags_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "derniere_utilisation": "={{ $('Tirer · description').first().json.maintenant }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "derniere_utilisation",
+              "displayName": "derniere_utilisation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "246d568f-45ae-568a-a03b-c2934e84745d",
+      "name": "Marquer hashtags · description",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        5940,
+        400
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $('Tirer · description').first().json }];\n"
+      },
+      "id": "bf4557a6-e7e1-56dc-a78a-f183f5c75188",
+      "name": "Retour · description",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6160,
+        500
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "82ae1a58-64a8-515f-9b0e-e767a29b8007",
+      "name": "Entrée · IG",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4620,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format commun : { type: reel|carrousel|story|post, images[], video, texte, langue_description,\n//                   langue_apprise, source, source_ref, desc_ids }  →  un conteneur par média.\nconst cfg = $('Config').first().json;\nconst req = $('Entrée · IG').first().json;\nconst type = String(req.type || '').toLowerCase();\nconst images = (req.images || []).filter(Boolean);\nconst caption = String(req.texte || '');\nconst fail = m => [{ json: { _ok: false, erreur: m } }];\nlet items = [];\nif (type === 'carrousel') {\n  if (images.length < cfg.min_carrousel) return fail(`carrousel : ${images.length} image(s), minimum ${cfg.min_carrousel}`);\n  if (images.length > cfg.max_carrousel) return fail(`carrousel : ${images.length} images, maximum de l'API ${cfg.max_carrousel}`);\n  items = images.map(u => ({ image_url: u, is_carousel_item: true }));\n} else if (type === 'post') {\n  if (images.length !== 1) return fail('post : exactement 1 image attendue');\n  items = [{ image_url: images[0], caption }];\n} else if (type === 'story') {\n  if (req.video) items = [{ media_type: 'STORIES', video_url: req.video }];\n  else if (images.length === 1) items = [{ media_type: 'STORIES', image_url: images[0] }];\n  else return fail('story : 1 image ou 1 vidéo attendue');\n} else if (type === 'reel') {\n  if (!req.video) return fail('reel : vidéo manquante');\n  items = [{ media_type: 'REELS', video_url: req.video, caption }];\n} else return fail(`type inconnu : « ${type} »`);\nif (caption.length > 2200) return fail(`légende trop longue (${caption.length}/2200 caractères)`);\nconst nTags = (caption.match(/#[^\\s#]+/g) || []).length;\nif (nTags > 30) return fail(`${nTags} hashtags (Instagram : 30 max)`);\nreturn items.map(params => ({ json: { _ok: true, params } }));\n"
+      },
+      "id": "2d2fc88b-879f-58d9-bc53-c17bc55264bb",
+      "name": "Préparer conteneurs · IG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5060,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "2704bb68-9b97-4ba0-a1b4-d46a384a1fe4",
+              "leftValue": "={{ $json._ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "eb14e4bb-9183-5b4b-a2e1-99097e29eedd",
+      "name": "Entrée valide ? · IG",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5280,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.ig_api }}/me/media",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.params) }}"
+      },
+      "id": "8fa92400-4383-5211-bbeb-74e1d2ffacfa",
+      "name": "Créer conteneur · IG",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5500,
+        300
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Entrée · IG').first().json;\nconst ids = [], errs = [];\nfor (const it of $input.all()) {\n  if (it.json.id) ids.push(String(it.json.id));\n  else errs.push([it.json.error?.message, it.json.error?.description].filter(Boolean).join(' — ') || JSON.stringify(it.json).slice(0, 300));\n}\nif (errs.length) return [{ json: { _ok: false, erreur: 'création du conteneur : ' + errs.join(' | ') } }];\nreturn [{ json: { _ok: true, ids, carrousel: String(req.type).toLowerCase() === 'carrousel' } }];\n"
+      },
+      "id": "6ee8237a-c624-5a7a-a173-e4ac382bbb15",
+      "name": "Collecter conteneurs · IG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "84dc98a7-e62a-4622-98b5-0215cb8254aa",
+              "leftValue": "={{ $json._ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "097cdb77-28ea-5cae-be11-abf93e5b4e39",
+      "name": "Conteneurs OK ? · IG",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5940,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "72f76963-c7e4-40ea-a66d-ef39950c3e5e",
+              "leftValue": "={{ $json.carrousel }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f2367b22-3e12-5441-9cbf-ad14a8f2e323",
+      "name": "Carrousel ? · IG",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6160,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.ig_api }}/me/media",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ media_type: 'CAROUSEL', children: $json.ids.join(','), caption: String($('Entrée · IG').first().json.texte || '') }) }}"
+      },
+      "id": "bdf12437-bee3-5e77-b7f1-1cddb2eee09c",
+      "name": "Créer carrousel · IG",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6380,
+        100
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Conteneur à publier : le carrousel parent, ou le conteneur unique (post / story / reel).\nconst j = $json;\nif (j.ids) return [{ json: { _ok: true, creation_id: j.ids[0] } }];\nif (j.id) return [{ json: { _ok: true, creation_id: String(j.id) } }];\nreturn [{ json: { _ok: false, erreur: 'création du carrousel : ' + ([j.error?.message, j.error?.description].filter(Boolean).join(' — ') || JSON.stringify(j).slice(0, 300)) } }];\n"
+      },
+      "id": "ecb66273-a1a4-5d9e-9ebc-642dcef593b2",
+      "name": "Cible · IG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6600,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f8be6c15-11a1-4873-a8ed-c4a58ed6af6e",
+              "leftValue": "={{ $json._ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d69afbe6-6c33-593d-b541-ce9a936c2108",
+      "name": "Cible OK ? · IG",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6820,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.ig_api }}/{{ $('Cible · IG').first().json.creation_id }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ fields: 'status_code,status' }) }}"
+      },
+      "id": "3af3c7d5-cd74-5c9c-ab96-dbf162d8e3ce",
+      "name": "Statut conteneur · IG",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7040,
+        100
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// FINISHED → publier ; ERROR/EXPIRED → échec ; sinon on réessaie (garde : poll_max vérifications).\nconst cfg = $('Config').first().json;\nconst s = $json.status_code;\nif (s === 'FINISHED') return [{ json: { etat: 'pret' } }];\nif (s === 'ERROR' || s === 'EXPIRED') return [{ json: { etat: 'echec', erreur: `conteneur ${s} : ${$json.status || ''}` } }];\nif ($runIndex + 1 >= cfg.poll_max) return [{ json: { etat: 'echec', erreur: `conteneur toujours « ${s || $json.error?.message || '?'} » après ${$runIndex + 1} vérifications` } }];\nreturn [{ json: { etat: 'attente' } }];\n"
+      },
+      "id": "3b93c384-2919-5e25-8c78-69a1f2baa159",
+      "name": "Évaluer statut · IG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7260,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "4b6a53a1-ba55-41a5-98eb-6456775d4a3e",
+              "leftValue": "={{ $json.etat === 'pret' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b072c205-f097-5791-9827-98f69aeed6a9",
+      "name": "Prêt ? · IG",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        7480,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "109e1c64-af55-4ec3-b83d-36049d43df83",
+              "leftValue": "={{ $json.etat === 'attente' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "18481e59-ffae-5c4a-ba52-5a2ef8384b2b",
+      "name": "En attente ? · IG",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        7700,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('Config').first().json.poll_attente_s }}",
+        "unit": "seconds"
+      },
+      "id": "317513cb-b0d0-5eaa-ae6c-d5efd3023809",
+      "name": "Attendre · IG",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        7920,
+        300
+      ],
+      "webhookId": "e5f61a80-f49f-54a0-b7b2-161ce115a0f6"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.ig_api }}/me/media_publish",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ creation_id: $('Cible · IG').first().json.creation_id }) }}"
+      },
+      "id": "97df7c7f-2576-5dbb-9a7a-bb18d64c2a98",
+      "name": "Publier · IG",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7700,
+        0
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "a0de0cd8-8400-4779-b7bf-56be420c9baa",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fe193a1b-2b33-5db8-ada3-aa8ceda370d2",
+      "name": "Publié ? · IG",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        7920,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.ig_api }}/{{ $json.id }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ fields: 'permalink,media_type' }) }}"
+      },
+      "id": "5039b304-e7a5-5506-8564-da1357dfc42f",
+      "name": "Permalien · IG",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8140,
+        -100
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Entrée · IG').first().json;\nconst d = req.desc_ids || {};\nconst s = v => (v === undefined || v === null) ? '' : String(v);\nreturn [{ json: {\n  plateforme: 'instagram', type: s(req.type), statut: 'ok',\n  post_id: s($('Publier · IG').first().json.id), permalink: s($json.permalink),\n  langue_description: s(req.langue_description), langue_apprise: s(req.langue_apprise),\n  texte_id: s(d.texte_id), cta_id: s(d.cta_id), hashtags_id: s(d.hashtags_id),\n  source: s(req.source), source_ref: s(req.source_ref), erreur: s('').slice(0, 900),\n  date_publication: new Date().toISOString(),\n} }];\n"
+      },
+      "id": "c6c35214-79a8-5ae9-b66e-8113094a0a5c",
+      "name": "Ligne journal (succès) · IG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8360,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_journal"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "plateforme": "={{ $json.plateforme }}",
+            "type": "={{ $json.type }}",
+            "statut": "={{ $json.statut }}",
+            "post_id": "={{ $json.post_id }}",
+            "permalink": "={{ $json.permalink }}",
+            "langue_description": "={{ $json.langue_description }}",
+            "langue_apprise": "={{ $json.langue_apprise }}",
+            "texte_id": "={{ $json.texte_id }}",
+            "cta_id": "={{ $json.cta_id }}",
+            "hashtags_id": "={{ $json.hashtags_id }}",
+            "source": "={{ $json.source }}",
+            "source_ref": "={{ $json.source_ref }}",
+            "erreur": "={{ $json.erreur }}",
+            "date_publication": "={{ $json.date_publication }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "plateforme",
+              "displayName": "plateforme",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "statut",
+              "displayName": "statut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_id",
+              "displayName": "post_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "permalink",
+              "displayName": "permalink",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "langue_description",
+              "displayName": "langue_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "langue_apprise",
+              "displayName": "langue_apprise",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "texte_id",
+              "displayName": "texte_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cta_id",
+              "displayName": "cta_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hashtags_id",
+              "displayName": "hashtags_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_ref",
+              "displayName": "source_ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "erreur",
+              "displayName": "erreur",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_publication",
+              "displayName": "date_publication",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c43e0211-d6c6-5c35-a655-8f14aa86e595",
+      "name": "Journal succès · IG",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        8580,
+        -100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const pub = $('Publier · IG').first().json;\nreturn [{ json: { ok: true, plateforme: 'instagram', post_id: String(pub.id),\n                  permalink: String($('Permalien · IG').first().json.permalink || '') } }];\n"
+      },
+      "id": "9d3f563f-9c62-5e52-8f05-1c5cce50d423",
+      "name": "Retour succès · IG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8800,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Toutes les branches d'erreur arrivent ici.\nconst j = $json;\nconst erreur = j.erreur || [j.error?.message, j.error?.description].filter(Boolean).join(' — ') || JSON.stringify(j).slice(0, 400);\nreturn [{ json: { erreur } }];\n"
+      },
+      "id": "3f1ddf70-dbce-5a90-8b55-6b2bff481a40",
+      "name": "Échec · IG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7920,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Entrée · IG').first().json;\nconst d = req.desc_ids || {};\nconst s = v => (v === undefined || v === null) ? '' : String(v);\nreturn [{ json: {\n  plateforme: 'instagram', type: s(req.type), statut: 'echec',\n  post_id: s(''), permalink: s(''),\n  langue_description: s(req.langue_description), langue_apprise: s(req.langue_apprise),\n  texte_id: s(d.texte_id), cta_id: s(d.cta_id), hashtags_id: s(d.hashtags_id),\n  source: s(req.source), source_ref: s(req.source_ref), erreur: s($json.erreur).slice(0, 900),\n  date_publication: new Date().toISOString(),\n} }];\n"
+      },
+      "id": "5d0867c0-4941-597e-9120-9fed87885b51",
+      "name": "Ligne journal (échec) · IG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8140,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_journal"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "plateforme": "={{ $json.plateforme }}",
+            "type": "={{ $json.type }}",
+            "statut": "={{ $json.statut }}",
+            "post_id": "={{ $json.post_id }}",
+            "permalink": "={{ $json.permalink }}",
+            "langue_description": "={{ $json.langue_description }}",
+            "langue_apprise": "={{ $json.langue_apprise }}",
+            "texte_id": "={{ $json.texte_id }}",
+            "cta_id": "={{ $json.cta_id }}",
+            "hashtags_id": "={{ $json.hashtags_id }}",
+            "source": "={{ $json.source }}",
+            "source_ref": "={{ $json.source_ref }}",
+            "erreur": "={{ $json.erreur }}",
+            "date_publication": "={{ $json.date_publication }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "plateforme",
+              "displayName": "plateforme",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "statut",
+              "displayName": "statut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_id",
+              "displayName": "post_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "permalink",
+              "displayName": "permalink",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "langue_description",
+              "displayName": "langue_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "langue_apprise",
+              "displayName": "langue_apprise",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "texte_id",
+              "displayName": "texte_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cta_id",
+              "displayName": "cta_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hashtags_id",
+              "displayName": "hashtags_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_ref",
+              "displayName": "source_ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "erreur",
+              "displayName": "erreur",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_publication",
+              "displayName": "date_publication",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "87e44d1d-6129-5b27-a6c8-62998e67a86c",
+      "name": "Journal échec · IG",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        8360,
+        600
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: false, plateforme: 'instagram', erreur: $('Échec · IG').first().json.erreur } }];\n"
+      },
+      "id": "3d0160da-8854-5ca8-a1aa-8ea0ae29e52f",
+      "name": "Retour échec · IG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8580,
+        600
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "37bdf61e-44b2-5d52-8911-3da48e79c67c",
+      "name": "Entrée · Pinterest",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        5500,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Adaptation Pinterest du format commun : une épingle par image (carrousel/post),\n// lien vers vocabag.com avec UTM Pinterest. Stories et Reels : pas publiés ici.\nconst cfg = $('Config').first().json;\nconst req = $('Entrée · Pinterest').first().json;\nif (!cfg.pinterest.actif) return [{ json: { _ok: false, ignore: true, raison: 'Pinterest désactivé (Config → pinterest.actif)' } }];\nconst type = String(req.type || '').toLowerCase();\nif (!['carrousel', 'post'].includes(type)) return [{ json: { _ok: false, ignore: true, raison: `type « ${type} » non publié sur Pinterest` } }];\nif (!cfg.pinterest.board_id) return [{ json: { _ok: false, erreur: 'pinterest.board_id manquant dans Config' } }];\nconst texte = String(req.texte || '');\nconst titre = texte.split('\\n')[0].replace(/#[^\\s#]+/g, '').trim().slice(0, 100) || 'VocaBag';\nconst lien = cfg.lien_pinterest + '&utm_campaign=' + encodeURIComponent(req.source_ref || type);\nreturn (req.images || []).map((url, i) => ({ json: { _ok: true, body: {\n  board_id: cfg.pinterest.board_id, title: titre, description: texte.slice(0, 500), link: lien,\n  alt_text: titre, media_source: { source_type: 'image_url', url },\n} } }));\n"
+      },
+      "id": "4b8ca0d1-87f4-52eb-8fb0-e9c0cfb2920c",
+      "name": "Préparer épingles · Pinterest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5940,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "c9401390-8dc3-483c-acb8-81092d50619e",
+              "leftValue": "={{ $json._ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "06f194cf-b997-5e34-bae9-78b7d9b73190",
+      "name": "Épingle à publier ? · Pinterest",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6160,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.pinterest.api }}/pins",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}"
+      },
+      "id": "f113b391-db1e-5083-8b92-7b54d8ea822d",
+      "name": "Créer épingle · Pinterest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6380,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput",
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = $input.all().map(i => i.json);\nconst first = $('Préparer épingles · Pinterest').first().json;\nif (first.ignore) return [{ json: { ok: false, ignore: true, raison: first.raison } }];\nconst ok = r.filter(j => j.id).map(j => String(j.id));\nreturn [{ json: { ok: ok.length > 0, plateforme: 'pinterest', pins: ok,\n                  erreur: ok.length ? '' : (first.erreur || 'aucune épingle créée') } }];\n"
+      },
+      "id": "1a8130b9-c8a1-500b-8a5f-aac164e42262",
+      "name": "Retour · Pinterest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6600,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Telegram": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Filtrer message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrer message": {
+      "main": [
+        [
+          {
+            "node": "Bouton blog ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bouton blog ?": {
+      "main": [
+        [
+          {
+            "node": "Décision blog",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Image ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Image ?": {
+      "main": [
+        [
+          {
+            "node": "Album ?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Album ?": {
+      "main": [
+        [
+          {
+            "node": "Mettre en tampon",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Photo seule",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mettre en tampon": {
+      "main": [
+        [
+          {
+            "node": "Attendre fin d'album",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attendre fin d'album": {
+      "main": [
+        [
+          {
+            "node": "Lire album",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire album": {
+      "main": [
+        [
+          {
+            "node": "Dernière photo ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dernière photo ?": {
+      "main": [
+        [
+          {
+            "node": "Analyser légende",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Photo seule": {
+      "main": [
+        [
+          {
+            "node": "Analyser légende",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyser légende": {
+      "main": [
+        [
+          {
+            "node": "Nombre OK ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nombre OK ?": {
+      "main": [
+        [
+          {
+            "node": "Déjà publié ?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Refus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refus": {
+      "main": [
+        [
+          {
+            "node": "Vider tampon ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Déjà publié ?": {
+      "main": [
+        [
+          {
+            "node": "Une ligne par image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Une ligne par image": {
+      "main": [
+        [
+          {
+            "node": "Télécharger image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Télécharger image": {
+      "main": [
+        [
+          {
+            "node": "Héberger image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Héberger image": {
+      "main": [
+        [
+          {
+            "node": "Collecter images",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collecter images": {
+      "main": [
+        [
+          {
+            "node": "Images OK ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Images OK ?": {
+      "main": [
+        [
+          {
+            "node": "Détecter langue ?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Erreur avant publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Détecter langue ?": {
+      "main": [
+        [
+          {
+            "node": "Détecter langues",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Langues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Détecter langues": {
+      "main": [
+        [
+          {
+            "node": "Langues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Langues": {
+      "main": [
+        [
+          {
+            "node": "Demande description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demande description": {
+      "main": [
+        [
+          {
+            "node": "Entrée · description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tirer description": {
+      "main": [
+        [
+          {
+            "node": "Description OK ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Description OK ?": {
+      "main": [
+        [
+          {
+            "node": "Demande publication",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Erreur avant publication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demande publication": {
+      "main": [
+        [
+          {
+            "node": "Entrée · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publier Instagram": {
+      "main": [
+        [
+          {
+            "node": "Message retour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message retour": {
+      "main": [
+        [
+          {
+            "node": "Répondre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Répondre": {
+      "main": [
+        [
+          {
+            "node": "Envoyer à Pinterest",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Vider tampon ?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Pour le blog ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer à Pinterest": {
+      "main": [
+        [
+          {
+            "node": "Entrée · Pinterest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vider tampon ?": {
+      "main": [
+        [
+          {
+            "node": "Vider tampon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pour le blog ?": {
+      "main": [
+        [
+          {
+            "node": "Mettre en file blog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mettre en file blog": {
+      "main": [
+        [
+          {
+            "node": "File blog OK ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "File blog OK ?": {
+      "main": [
+        [
+          {
+            "node": "Signaler file blog",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Erreur avant publication": {
+      "main": [
+        [
+          {
+            "node": "Signaler erreur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Signaler erreur": {
+      "main": [
+        [
+          {
+            "node": "Vider tampon ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrée · description": {
+      "main": [
+        [
+          {
+            "node": "Lire textes · description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire textes · description": {
+      "main": [
+        [
+          {
+            "node": "Lire CTA · description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire CTA · description": {
+      "main": [
+        [
+          {
+            "node": "Lire hashtags · description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire hashtags · description": {
+      "main": [
+        [
+          {
+            "node": "Tirer · description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tirer · description": {
+      "main": [
+        [
+          {
+            "node": "Tirage OK ? · description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tirage OK ? · description": {
+      "main": [
+        [
+          {
+            "node": "Marquer texte · description",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retour · description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marquer texte · description": {
+      "main": [
+        [
+          {
+            "node": "Marquer CTA · description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marquer CTA · description": {
+      "main": [
+        [
+          {
+            "node": "Marquer hashtags · description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marquer hashtags · description": {
+      "main": [
+        [
+          {
+            "node": "Retour · description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retour · description": {
+      "main": [
+        [
+          {
+            "node": "Tirer description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrée · IG": {
+      "main": [
+        [
+          {
+            "node": "Préparer conteneurs · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer conteneurs · IG": {
+      "main": [
+        [
+          {
+            "node": "Entrée valide ? · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrée valide ? · IG": {
+      "main": [
+        [
+          {
+            "node": "Créer conteneur · IG",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer conteneur · IG": {
+      "main": [
+        [
+          {
+            "node": "Collecter conteneurs · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collecter conteneurs · IG": {
+      "main": [
+        [
+          {
+            "node": "Conteneurs OK ? · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conteneurs OK ? · IG": {
+      "main": [
+        [
+          {
+            "node": "Carrousel ? · IG",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carrousel ? · IG": {
+      "main": [
+        [
+          {
+            "node": "Créer carrousel · IG",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cible · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer carrousel · IG": {
+      "main": [
+        [
+          {
+            "node": "Cible · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cible · IG": {
+      "main": [
+        [
+          {
+            "node": "Cible OK ? · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cible OK ? · IG": {
+      "main": [
+        [
+          {
+            "node": "Statut conteneur · IG",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Statut conteneur · IG": {
+      "main": [
+        [
+          {
+            "node": "Évaluer statut · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Évaluer statut · IG": {
+      "main": [
+        [
+          {
+            "node": "Prêt ? · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prêt ? · IG": {
+      "main": [
+        [
+          {
+            "node": "Publier · IG",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "En attente ? · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "En attente ? · IG": {
+      "main": [
+        [
+          {
+            "node": "Attendre · IG",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attendre · IG": {
+      "main": [
+        [
+          {
+            "node": "Statut conteneur · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publier · IG": {
+      "main": [
+        [
+          {
+            "node": "Publié ? · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publié ? · IG": {
+      "main": [
+        [
+          {
+            "node": "Permalien · IG",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Permalien · IG": {
+      "main": [
+        [
+          {
+            "node": "Ligne journal (succès) · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ligne journal (succès) · IG": {
+      "main": [
+        [
+          {
+            "node": "Journal succès · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Journal succès · IG": {
+      "main": [
+        [
+          {
+            "node": "Retour succès · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Échec · IG": {
+      "main": [
+        [
+          {
+            "node": "Ligne journal (échec) · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ligne journal (échec) · IG": {
+      "main": [
+        [
+          {
+            "node": "Journal échec · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Journal échec · IG": {
+      "main": [
+        [
+          {
+            "node": "Retour échec · IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retour succès · IG": {
+      "main": [
+        [
+          {
+            "node": "Publier Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retour échec · IG": {
+      "main": [
+        [
+          {
+            "node": "Publier Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrée · Pinterest": {
+      "main": [
+        [
+          {
+            "node": "Préparer épingles · Pinterest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer épingles · Pinterest": {
+      "main": [
+        [
+          {
+            "node": "Épingle à publier ? · Pinterest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Épingle à publier ? · Pinterest": {
+      "main": [
+        [
+          {
+            "node": "Créer épingle · Pinterest",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retour · Pinterest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer épingle · Pinterest": {
+      "main": [
+        [
+          {
+            "node": "Retour · Pinterest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retour · Pinterest": {
+      "main": [
+        [
+          {
+            "node": "Publier Pinterest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "tags": []
+}

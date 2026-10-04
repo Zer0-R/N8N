@@ -1,0 +1,1127 @@
+{
+  "name": "Meta - Publier Reel (VocaBag)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "7cd738c4-b348-5b9e-9f9a-c58f40455010",
+      "name": "Entrée",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Paramètres du compte + valeurs reçues du workflow appelant.\nconst entree = $input.first().json;\nreturn [{ json: {\n  graph: 'https://graph.facebook.com/v23.0',\n  graph_video: 'https://graph-video.facebook.com/v23.0',\n  ig_user: '17841449858344452',\n  fb_page: '1361049150428275',\n  compte: 'VocaBag',\n  chat_id: '6980427615',\n  essais: 3,             // tentatives par plateforme\n  pause_s: 60,           // entre deux tentatives (< 65 s : l'exécution reste en mémoire)\n  poll_s: 15,            // entre deux lectures du statut du conteneur Instagram\n  poll_max_s: 600,       // traitement Instagram au-delà → tentative en échec\n  instagram: true, facebook: true, alerter: true, share_to_feed: true, contexte: '',\n  ...entree,\n} }];\n"
+      },
+      "id": "847513a9-2d5f-507d-816c-5f67146dece7",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "d7c6003f-c17c-54e1-8198-7e95bb1f0d1c",
+              "leftValue": "={{ $('Config').first().json.instagram !== false }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2fb5d711-f183-5c1c-9078-43ee0195483a",
+      "name": "Instagram ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.graph }}/{{ $('Config').first().json.ig_user }}/media",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "media_type",
+              "value": "REELS"
+            },
+            {
+              "name": "video_url",
+              "value": "={{ $('Config').first().json.video_url }}"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $('Config').first().json.caption }}"
+            },
+            {
+              "name": "share_to_feed",
+              "value": "={{ $('Config').first().json.share_to_feed === false ? \"false\" : \"true\" }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "7188d24d-efc3-5ba9-84db-9a6a14ba8d88",
+      "name": "IG · Créer conteneur",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        600,
+        200
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const msgErreur = j => {\n  if (!j) return 'réponse vide';\n  if (j.erreur) return String(j.erreur);\n  const e = j.error;\n  if (e) return [e.error_user_title, e.error_user_msg || e.message, e.code != null ? `(code ${e.code}${e.error_subcode ? '/' + e.error_subcode : ''})` : '']\n    .filter(Boolean).join(' ');\n  return JSON.stringify(j).slice(0, 300);\n};\nconst tokenInvalide = m => /\\(code 190\\b|access token|session has been invalidated/i.test(m);\nconst r = $input.first().json;\nif (r.id) return [{ json: { ok: true, creation_id: r.id, debut: Date.now() } }];\nreturn [{ json: { ok: false, erreur: msgErreur(r) } }];\n"
+      },
+      "id": "0c5c527d-6666-5f7e-9d5b-88dbc6e400a2",
+      "name": "IG · Départ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "580fc8e5-c7c0-53dc-8e0e-a5367480f007",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f1eb1543-90cd-5fbd-a480-c905f17c5676",
+      "name": "IG · Conteneur créé ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1000,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('Config').first().json.poll_s }}",
+        "unit": "seconds"
+      },
+      "id": "92d6a71b-8300-5324-9066-4f7e6c3cd9b4",
+      "name": "IG · Attente",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        100
+      ],
+      "webhookId": "a99ca2c2-ffcb-5e41-8c7b-7d29905f42d5"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.graph }}/{{ $('IG · Départ').last().json.creation_id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "status_code,status"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "59e83492-0df2-57a1-84b3-5dccede537c5",
+      "name": "IG · Statut",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1400,
+        100
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const msgErreur = j => {\n  if (!j) return 'réponse vide';\n  if (j.erreur) return String(j.erreur);\n  const e = j.error;\n  if (e) return [e.error_user_title, e.error_user_msg || e.message, e.code != null ? `(code ${e.code}${e.error_subcode ? '/' + e.error_subcode : ''})` : '']\n    .filter(Boolean).join(' ');\n  return JSON.stringify(j).slice(0, 300);\n};\nconst tokenInvalide = m => /\\(code 190\\b|access token|session has been invalidated/i.test(m);\nconst cfg = $('Config').first().json;\nconst r = $input.first().json;\nconst depart = $('IG · Départ').last().json;\nif (r.error) return [{ json: { etat: 'echec', erreur: msgErreur(r) } }];\nconst s = r.status_code;\nif (s === 'FINISHED') return [{ json: { etat: 'pret' } }];\nif (s === 'ERROR' || s === 'EXPIRED') return [{ json: { etat: 'echec', erreur: `conteneur ${s} : ${r.status || ''}` } }];\nif (Date.now() - depart.debut > cfg.poll_max_s * 1000)\n  return [{ json: { etat: 'echec', erreur: `traitement Instagram trop long (${s || '?'} après ${cfg.poll_max_s} s)` } }];\nreturn [{ json: { etat: 'attente' } }];\n"
+      },
+      "id": "555b2f31-e77f-5510-aa30-b5ceba647797",
+      "name": "IG · Évaluer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "84310534-bf6b-5aa7-adfb-f4c935cf09cc",
+              "leftValue": "={{ $json.etat === 'pret' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "95c8edf0-7ae0-5c26-912f-3e0e4cf997c8",
+      "name": "IG · Prêt ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "943271b9-41c7-52e9-b759-e45463853771",
+              "leftValue": "={{ $json.etat === 'attente' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d95f1b98-00d0-5a0c-8afd-5563019cbab5",
+      "name": "IG · En cours ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.graph }}/{{ $('Config').first().json.ig_user }}/media_publish",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "creation_id",
+              "value": "={{ $('IG · Départ').last().json.creation_id }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "3ffeed91-fd7f-598c-9617-ce199381fcb7",
+      "name": "IG · Publier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        0
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1b44f79a-caf6-5f52-ba3c-42cf398a0c58",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b8bd118c-79d5-5f2c-a0f5-551cc3891e51",
+      "name": "IG · Publié ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const msgErreur = j => {\n  if (!j) return 'réponse vide';\n  if (j.erreur) return String(j.erreur);\n  const e = j.error;\n  if (e) return [e.error_user_title, e.error_user_msg || e.message, e.code != null ? `(code ${e.code}${e.error_subcode ? '/' + e.error_subcode : ''})` : '']\n    .filter(Boolean).join(' ');\n  return JSON.stringify(j).slice(0, 300);\n};\nconst tokenInvalide = m => /\\(code 190\\b|access token|session has been invalidated/i.test(m);\n// Une exécution de ce nœud = une tentative ratée ($runIndex compte les passages).\nconst cfg = $('Config').first().json;\nconst erreur = msgErreur($input.first().json);\nconst tentative = $runIndex + 1;\nreturn [{ json: { erreur, tentative, retenter: !tokenInvalide(erreur) && tentative < cfg.essais } }];\n"
+      },
+      "id": "dd7f279b-e47a-5106-b25e-8de1519e6d1f",
+      "name": "IG · Échec",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "9d4857e5-19c1-5f10-9a1c-67af0610e2a9",
+              "leftValue": "={{ $json.retenter }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "041b92d3-1f11-5865-9869-50e41bb01d3a",
+      "name": "IG · Réessayer ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('Config').first().json.pause_s }}",
+        "unit": "seconds"
+      },
+      "id": "2e95b089-9f5f-5b06-a291-146e1625df0b",
+      "name": "IG · Pause",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        2600,
+        500
+      ],
+      "webhookId": "cd3c5aa7-57d7-51ce-9802-5c04d599bcfc"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config').first().json;\nconst j = $input.first().json;\nif (cfg.instagram === false) return [{ json: { instagram: 'ignoré' } }];\nif (j.id && j.erreur == null) return [{ json: { instagram_id: String(j.id) } }];\nreturn [{ json: { instagram_erreur: `${j.erreur} — ${j.tentative} tentative(s)` } }];\n"
+      },
+      "id": "f97532a8-bf9f-54d5-843b-c7e5c7b3f906",
+      "name": "IG · Fin",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1badaa92-efb5-5567-be8a-74d8dd8f6815",
+              "leftValue": "={{ $('Config').first().json.facebook !== false }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "34fb719f-71af-556a-b6bc-81de34e4e6bf",
+      "name": "Facebook ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.graph_video }}/{{ $('Config').first().json.fb_page }}/videos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "file_url",
+              "value": "={{ $('Config').first().json.video_url }}"
+            },
+            {
+              "name": "title",
+              "value": "={{ $('Config').first().json.fb_title }}"
+            },
+            {
+              "name": "description",
+              "value": "={{ $('Config').first().json.fb_description }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 300000
+        }
+      },
+      "id": "4174df7f-db75-59a4-987b-ecf2af767933",
+      "name": "FB · Publier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3000,
+        200
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const msgErreur = j => {\n  if (!j) return 'réponse vide';\n  if (j.erreur) return String(j.erreur);\n  const e = j.error;\n  if (e) return [e.error_user_title, e.error_user_msg || e.message, e.code != null ? `(code ${e.code}${e.error_subcode ? '/' + e.error_subcode : ''})` : '']\n    .filter(Boolean).join(' ');\n  return JSON.stringify(j).slice(0, 300);\n};\nconst tokenInvalide = m => /\\(code 190\\b|access token|session has been invalidated/i.test(m);\nconst r = $input.first().json;\nif (r.id) return [{ json: { id: String(r.id) } }];\nreturn [{ json: { erreur: msgErreur(r) } }];\n"
+      },
+      "id": "1448774f-347b-579b-beab-bbc51b256575",
+      "name": "FB · Évaluer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3200,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "8c99242c-9fdc-568e-8f73-8650328590c7",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "cace09d3-5900-5a1a-a9ef-92fa4358d3f0",
+      "name": "FB · Publié ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3400,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const msgErreur = j => {\n  if (!j) return 'réponse vide';\n  if (j.erreur) return String(j.erreur);\n  const e = j.error;\n  if (e) return [e.error_user_title, e.error_user_msg || e.message, e.code != null ? `(code ${e.code}${e.error_subcode ? '/' + e.error_subcode : ''})` : '']\n    .filter(Boolean).join(' ');\n  return JSON.stringify(j).slice(0, 300);\n};\nconst tokenInvalide = m => /\\(code 190\\b|access token|session has been invalidated/i.test(m);\n// Une exécution de ce nœud = une tentative ratée ($runIndex compte les passages).\nconst cfg = $('Config').first().json;\nconst erreur = msgErreur($input.first().json);\nconst tentative = $runIndex + 1;\nreturn [{ json: { erreur, tentative, retenter: !tokenInvalide(erreur) && tentative < cfg.essais } }];\n"
+      },
+      "id": "c87f4700-0124-5953-875d-eb7db7fbe1da",
+      "name": "FB · Échec",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "8de3f2c6-50df-55a9-8588-1e48ba604e43",
+              "leftValue": "={{ $json.retenter }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "99a5e6f2-b2fc-5b68-9209-deb3dc1068df",
+      "name": "FB · Réessayer ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3800,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('Config').first().json.pause_s }}",
+        "unit": "seconds"
+      },
+      "id": "25c01f07-cedb-5dc3-8ca2-e5a4ddf175cd",
+      "name": "FB · Pause",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4000,
+        500
+      ],
+      "webhookId": "cf8fc7d9-dbb6-5c50-9f83-5c81f0f6a398"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config').first().json;\nconst j = $input.first().json;\nif (cfg.facebook === false) return [{ json: { facebook: 'ignoré' } }];\nif (j.id && j.erreur == null) return [{ json: { facebook_id: String(j.id) } }];\nreturn [{ json: { facebook_erreur: `${j.erreur} — ${j.tentative} tentative(s)` } }];\n"
+      },
+      "id": "b362d323-ad71-5491-8be4-4eddc9056645",
+      "name": "FB · Fin",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst cfg = $('Config').first().json;\nconst ig = $('IG · Fin').first().json, fb = $('FB · Fin').first().json;\nconst res = { compte: cfg.compte, instagram_id: ig.instagram_id || '', instagram_erreur: ig.instagram_erreur || '',\n              facebook_id: fb.facebook_id || '', facebook_erreur: fb.facebook_erreur || '' };\nconst lignes = [];\nif (res.instagram_erreur) lignes.push(`❌ Instagram : ${e(res.instagram_erreur)}`);\nif (res.facebook_erreur) lignes.push(`❌ Facebook : ${e(res.facebook_erreur)}`);\nif (res.instagram_id) lignes.push(`✔️ Instagram publié (${res.instagram_id})`);\nif (res.facebook_id) lignes.push(`✔️ Facebook publié (${res.facebook_id})`);\nconst echec = !!(res.instagram_erreur || res.facebook_erreur);\nres.alerte = echec && cfg.alerter !== false\n  ? `🚨 <b>${e(cfg.compte)} — publication du Reel en échec</b>${cfg.contexte ? '\\n' + e(cfg.contexte) : ''}\\n\\n${lignes.join('\\n')}`\n    + (/code 190/.test(lignes.join(' ')) ? '\\n\\n🔑 Token Meta invalide : régénérer le token de page.' : '')\n    + '\\n\\nLa vérification du jour tentera un rattrapage automatique.'\n  : '';\nreturn [{ json: res }];\n"
+      },
+      "id": "7f672594-91b9-57f0-99af-da3bd12d32d3",
+      "name": "Résultat",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "eca2772c-9b63-52f3-9e56-9d09fbaf9755",
+              "leftValue": "={{ !!$json.alerte }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e959c9b4-35e7-561d-9164-65783a70e90d",
+      "name": "Alerter ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.chat_id }}",
+        "text": "={{ $json.alerte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "8b3424f6-1811-596b-b745-64616e51a7da",
+      "name": "Alerte Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4600,
+        200
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = { ...$('Résultat').first().json };\ndelete r.alerte;\nreturn [{ json: r }];\n"
+      },
+      "id": "a9048470-ec2f-577a-bf70-2948be8b87f1",
+      "name": "Retour",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4800,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Entrée": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Instagram ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram ?": {
+      "main": [
+        [
+          {
+            "node": "IG · Créer conteneur",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IG · Fin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Créer conteneur": {
+      "main": [
+        [
+          {
+            "node": "IG · Départ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Départ": {
+      "main": [
+        [
+          {
+            "node": "IG · Conteneur créé ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Conteneur créé ?": {
+      "main": [
+        [
+          {
+            "node": "IG · Attente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IG · Échec",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Attente": {
+      "main": [
+        [
+          {
+            "node": "IG · Statut",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Statut": {
+      "main": [
+        [
+          {
+            "node": "IG · Évaluer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Évaluer": {
+      "main": [
+        [
+          {
+            "node": "IG · Prêt ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Prêt ?": {
+      "main": [
+        [
+          {
+            "node": "IG · Publier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IG · En cours ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · En cours ?": {
+      "main": [
+        [
+          {
+            "node": "IG · Attente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IG · Échec",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Publier": {
+      "main": [
+        [
+          {
+            "node": "IG · Publié ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Publié ?": {
+      "main": [
+        [
+          {
+            "node": "IG · Fin",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IG · Échec",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Échec": {
+      "main": [
+        [
+          {
+            "node": "IG · Réessayer ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Réessayer ?": {
+      "main": [
+        [
+          {
+            "node": "IG · Pause",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IG · Fin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Pause": {
+      "main": [
+        [
+          {
+            "node": "IG · Créer conteneur",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Fin": {
+      "main": [
+        [
+          {
+            "node": "Facebook ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Facebook ?": {
+      "main": [
+        [
+          {
+            "node": "FB · Publier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "FB · Fin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB · Publier": {
+      "main": [
+        [
+          {
+            "node": "FB · Évaluer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB · Évaluer": {
+      "main": [
+        [
+          {
+            "node": "FB · Publié ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB · Publié ?": {
+      "main": [
+        [
+          {
+            "node": "FB · Fin",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "FB · Échec",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB · Échec": {
+      "main": [
+        [
+          {
+            "node": "FB · Réessayer ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB · Réessayer ?": {
+      "main": [
+        [
+          {
+            "node": "FB · Pause",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "FB · Fin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB · Pause": {
+      "main": [
+        [
+          {
+            "node": "FB · Publier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FB · Fin": {
+      "main": [
+        [
+          {
+            "node": "Résultat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Résultat": {
+      "main": [
+        [
+          {
+            "node": "Alerter ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alerter ?": {
+      "main": [
+        [
+          {
+            "node": "Alerte Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alerte Telegram": {
+      "main": [
+        [
+          {
+            "node": "Retour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris",
+    "errorWorkflow": "VbErreursAlerte1",
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

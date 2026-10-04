@@ -1,0 +1,14 @@
+[Unit]
+Description=VocaBag media (n8n social : ingestion images, rendu HTML->image, hebergement public)
+After=network-online.target docker.service
+
+[Service]
+EnvironmentFile=/etc/vocabag-media.env
+ExecStart=/usr/bin/python3 /var/www/muz-video-template/social/media-service/server.py
+Restart=always
+RestartSec=5
+# Chromium (Playwright) est installe dans /root/.cache/ms-playwright
+Environment=HOME=/root
+
+[Install]
+WantedBy=multi-user.target

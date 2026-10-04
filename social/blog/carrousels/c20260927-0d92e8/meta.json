@@ -1,0 +1,32 @@
+{
+  "id": "c20260927-0d92e8",
+  "source_ref": "test-blog-1",
+  "cree_le": "2026-09-27T14:25:43",
+  "statut": "rejete",
+  "essais": 0,
+  "erreur": "",
+  "langue_code": "ary",
+  "langue_description": "fr",
+  "caption": "fr darija",
+  "texte": "Tu veux parler darija comme au Maroc ? 🇲🇦 Voici comment dire merci. Swipe 👉",
+  "permalink": "https://www.instagram.com/p/TEST/",
+  "images": [
+    {
+      "fichier": "1.jpg",
+      "url_apercu": "https://n8n.rapidvideomaker.com/social-media/202609/wqP0QIDmcIovqcCAQzQG-e7U.jpg"
+    },
+    {
+      "fichier": "2.jpg",
+      "url_apercu": "https://n8n.rapidvideomaker.com/social-media/202609/_M5xfgz2bRgvBAXYWNe5enc1.jpg"
+    },
+    {
+      "fichier": "3.jpg",
+      "url_apercu": "https://n8n.rapidvideomaker.com/social-media/202609/wUnGyoMePOBX_d6ZsKVXb4Qx.jpg"
+    }
+  ],
+  "titre": "Merci en darija : shukran, y3ishek et comment bien remercier",
+  "slug": "merci-en-darija-shukran-y3ishek",
+  "description": "Comment dire merci en darija marocain ? Découvre shukran et y3ishek, puis merci beaucoup, de rien et s'il te plaît pour être poli partout au Maroc.",
+  "avertissements": [],
+  "redige_le": "2026-09-27T14:26:41"
+}

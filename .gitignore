@@ -1,0 +1,13 @@
+# Médias générés (vidéos, sons, images) — volumineux, hors dépôt
+channels/
+social/public/
+*.mp4
+*.mp3
+# Caches / temporaires
+__pycache__/
+*.pyc
+social/media-service/tmp/
+# Secrets éventuels
+.env
+.env.*
+*.key

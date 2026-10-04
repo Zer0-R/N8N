@@ -1,0 +1,1476 @@
+{
+  "id": "VbSocialPrompt01",
+  "name": "VocaBag Social - Prompt carrousel",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "513d349f-1fd5-5eae-80cc-52987a0266bc",
+      "name": "Entrée",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vb-prompt-test",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "e913d21b-f9be-59a3-a80b-6578ef785a05",
+      "name": "Test",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L2zYP3cEvAgZVffN",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "webhookId": "a7479003-8703-5082-ae61-c8439cf17c8e"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CONFIGURATION de ce workflow — modifier ici. Les secrets restent dans les credentials n8n.\nreturn [{ json: {\n  // --- Telegram : seul ce chat peut piloter le bot et reçoit les messages\n  telegram_chat_id: '6980427615',\n\n  // --- Service média local (conversion, rendu HTML→image, hébergement public, blog)\n  media_service: 'http://host.docker.internal:8791',\n\n  // --- Langues apprises : code VocaBag ⇄ noms acceptés dans la légende Telegram / les tables\n  langues: {\n    ary: { nom: 'darija',            drapeau: '🇲🇦', alias: ['ary', 'darija', 'marocain', 'moroccan'] },\n    ar:  { nom: 'arabe littéraire',  drapeau: '🇸🇦', alias: ['ar', 'arabe', 'arabic', 'msa', 'fusha'] },\n    zh:  { nom: 'chinois',           drapeau: '🇨🇳', alias: ['zh', 'chinois', 'chinese', 'mandarin'] },\n    en:  { nom: 'anglais',           drapeau: '🇬🇧', alias: ['en', 'anglais', 'english'] },\n    de:  { nom: 'allemand',          drapeau: '🇩🇪', alias: ['de', 'allemand', 'german'] },\n    es:  { nom: 'espagnol',          drapeau: '🇪🇸', alias: ['es', 'espagnol', 'spanish'] },\n    pt:  { nom: 'portugais',         drapeau: '🇧🇷', alias: ['pt', 'portugais', 'portuguese'] },\n    it:  { nom: 'italien',           drapeau: '🇮🇹', alias: ['it', 'italien', 'italian'] },\n    nl:  { nom: 'néerlandais',       drapeau: '🇳🇱', alias: ['nl', 'neerlandais', 'néerlandais', 'dutch'] },\n    ru:  { nom: 'russe',             drapeau: '🇷🇺', alias: ['ru', 'russe', 'russian'] },\n    tr:  { nom: 'turc',              drapeau: '🇹🇷', alias: ['tr', 'turc', 'turkish'] },\n    ko:  { nom: 'coréen',            drapeau: '🇰🇷', alias: ['ko', 'coreen', 'coréen', 'korean'] },\n  },\n\n  // --- Prompt carrousel : boutons Telegram langue → catégorie → prompt ChatGPT (mots tirés de la base VocaBag)\n  prompt: {\n    solos: [\"ar\", \"ary\", \"de\", \"en\", \"es\", \"it\", \"ko\", \"nl\", \"pt\", \"ru\", \"tr\", \"zh\"],\n    duels: [\"ary_ar\", \"de_nl\", \"es_it\", \"es_pt\", \"it_pt\"],     // = images languages/<a>_<b>.png\n    categories: [{\"id\": 1, \"icon\": \"👋\", \"nom\": \"Salutations\", \"slug\": \"greetings\"}, {\"id\": 2, \"icon\": \"💬\", \"nom\": \"Expressions de base\", \"slug\": \"basics\"}, {\"id\": 3, \"icon\": \"✈️\", \"nom\": \"Voyage\", \"slug\": \"travel\"}, {\"id\": 4, \"icon\": \"🍽️\", \"nom\": \"Nourriture\", \"slug\": \"food\"}, {\"id\": 5, \"icon\": \"🏠\", \"nom\": \"Activités quotidiennes\", \"slug\": \"daily_life\"}, {\"id\": 6, \"icon\": \"👨‍👩‍👧\", \"nom\": \"Famille & relations\", \"slug\": \"family\"}, {\"id\": 7, \"icon\": \"🔢\", \"nom\": \"Chiffres & temps\", \"slug\": \"numbers_time\"}, {\"id\": 8, \"icon\": \"🎨\", \"nom\": \"Couleurs & descriptions\", \"slug\": \"colors_desc\"}, {\"id\": 9, \"icon\": \"🏥\", \"nom\": \"Corps & santé\", \"slug\": \"health_body\"}, {\"id\": 10, \"icon\": \"🛒\", \"nom\": \"Marché & shopping\", \"slug\": \"market_shopping\"}, {\"id\": 11, \"icon\": \"💼\", \"nom\": \"Travail & études\", \"slug\": \"work_studies\"}, {\"id\": 12, \"icon\": \"😊\", \"nom\": \"Émotions & états\", \"slug\": \"emotions\"}, {\"id\": 13, \"icon\": \"🕌\", \"nom\": \"Religion & culture\", \"slug\": \"religion_culture\"}, {\"id\": 14, \"icon\": \"🚌\", \"nom\": \"Transport & directions\", \"slug\": \"transport\"}, {\"id\": 15, \"icon\": \"📱\", \"nom\": \"Technologie & Internet\", \"slug\": \"technology\"}, {\"id\": 16, \"icon\": \"🏠\", \"nom\": \"Maison & intérieur\", \"slug\": \"home_interior\"}, {\"id\": 17, \"icon\": \"👕\", \"nom\": \"Vêtements\", \"slug\": \"clothing\"}, {\"id\": 18, \"icon\": \"⛅\", \"nom\": \"Météo & nature\", \"slug\": \"weather_nature\"}, {\"id\": 19, \"icon\": \"🐱\", \"nom\": \"Animaux\", \"slug\": \"animals\"}, {\"id\": 20, \"icon\": \"⚽\", \"nom\": \"Sports & loisirs\", \"slug\": \"sports_leisure\"}, {\"id\": 21, \"icon\": \"💰\", \"nom\": \"Argent & banque\", \"slug\": \"money_banking\"}],   // boutons fixes (PROMPT_CATEGORIES du générateur)\n    nb_mots: 10,                // par langue (duel : 10 paires = 20 mots)\n    // Nom affiché sur le carrousel (avec le drapeau de Config.langues)\n    noms: { ary: 'Darija marocaine', ar: 'Arabe littéraire', zh: 'Chinois (mandarin)', en: 'Anglais', de: 'Allemand',\n            es: 'Espagnol', pt: 'Portugais (Brésil)', it: 'Italien', nl: 'Néerlandais', ru: 'Russe', tr: 'Turc',\n            ko: 'Coréen' },\n    // Fin de la zone « Catégorie : » (solo) : « 🇲🇦 Les animaux en darija »\n    en: { ary: 'en darija', ar: 'en arabe littéraire', zh: 'en chinois', en: 'en anglais', de: 'en allemand',\n          es: 'en espagnol', pt: 'en portugais', it: 'en italien', nl: 'en néerlandais', ru: 'en russe', tr: 'en turc',\n          ko: 'en coréen' },\n    // Appellation de la liste par catégorie (slug) ; sinon le nom de la catégorie sur le site\n    titres: {\n      greetings: 'Les salutations indispensables', basics: 'Les expressions de base', travel: 'Les mots du voyage',\n      food: 'À table ! Les mots de la cuisine', daily_life: 'Les mots du quotidien', family: 'La famille & les proches',\n      numbers_time: 'Chiffres & temps', colors_desc: 'Couleurs & descriptions', health_body: 'Le corps & la santé',\n      market_shopping: 'Au marché', work_studies: 'Travail & études', emotions: 'Exprimer ses émotions',\n      religion_culture: 'Religion & culture', transport: 'Se déplacer', technology: 'Technologie & Internet',\n      home_interior: 'À la maison', clothing: 'Les vêtements', weather_nature: 'Météo & nature',\n      animals: 'Les animaux', sports_leisure: 'Sports & loisirs', money_banking: 'Argent & banque',\n    },\n  },\n} }];\n"
+      },
+      "id": "dff185cd-f876-576b-bedb-4d45c04461d6",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Valide la demande (sel / cat viennent des boutons : rien d'autre n'entre dans le SQL) et prépare la requête.\nconst cfg = $('Config').first().json;\nconst P = cfg.prompt;\nconst d = $('Entrée').isExecuted ? $('Entrée').first().json : ($('Test').first().json.body || {});\nconst etape = ['langue', 'categorie', 'prompt'].includes(d.etape) ? d.etape : 'langue';\nconst sel = String(d.sel || '');\nconst ok = P.solos.includes(sel) || P.duels.includes(sel);\nconst cat = parseInt(d.cat, 10);\nconst base = { etape, sel, cat: Number.isInteger(cat) ? cat : 0, callback_query_id: d.callback_query_id || '',\n               message_id: Number(d.message_id) || 0, nouveau: d.nouveau !== false || !d.message_id };\nif (etape === 'langue') return [{ json: { ...base, sql: '' } }];\nif (!ok) return [{ json: { ...base, etape: 'langue', nouveau: true, sql: '', erreur: `Langue inconnue : ${sel}` } }];\nconst [a, b] = sel.split('_');\nconst lid = c => `(SELECT id FROM languages WHERE code = '${c}')`;\n// Mots retenus : actifs, validés, mots/expressions courts (lisibles sur une diapo) ; une seule entrée par sens.\n// Duel : un « mot » = un sens (traduction FR) présent dans les deux langues, même catégorie (comme Vocabag Video).\nconst filtre = x => `${x}.active = 1 AND ${x}.needs_validation = 0 AND ${x}.type IN ('word','expression') AND CHAR_LENGTH(${x}.word) <= 30`;\n// Sens comparé sans article ni casse : selon la langue, la base dit « la tête » ou « Tête » (de_nl : 1 → 25 mots\n// communs en « Corps & santé »).\nconst norm = x => `LOWER(REGEXP_REPLACE(REGEXP_REPLACE(TRIM(${x}), '^(le|la|les|un|une|des) ', ''), '^l[''’] ?', ''))`;\nconst joins = `JOIN vocabulary_translations ta ON ta.vocabulary_id = va.id AND ta.target_locale = 'fr'` + (b ? `\n  JOIN vocabulary vb ON vb.category_id = va.category_id AND vb.language_id = ${lid(b)} AND ${filtre('vb')}\n  JOIN vocabulary_translations tb ON tb.vocabulary_id = vb.id AND tb.target_locale = 'fr' AND ${norm('tb.translation')} = ${norm('ta.translation')}` : '');\nconst where = `va.language_id = ${lid(a)} AND ${filtre('va')} AND CHAR_LENGTH(ta.translation) <= 40`;\nlet sql;\nif (etape === 'categorie') {\n  sql = `SELECT va.category_id AS id, COUNT(DISTINCT ${norm('ta.translation')}) AS n\nFROM vocabulary va\n  ${joins}\nWHERE ${where}\nGROUP BY va.category_id`;\n} else {\n  if (!Number.isInteger(cat) || cat < 1) return [{ json: { ...base, etape: 'categorie', sql: '', erreur: 'Catégorie invalide' } }];\n  const cols = b ? 'va.word AS word_a, va.transliteration AS translit_a, vb.word AS word_b, vb.transliteration AS translit_b, va.type'\n                 : 'va.word AS word_a, va.transliteration AS translit_a, va.type';\n  sql = `SELECT t.* FROM (\n  SELECT ${cols}, ta.translation,\n         ROW_NUMBER() OVER (PARTITION BY ${norm('ta.translation')} ORDER BY RAND()) AS rn\n  FROM vocabulary va\n  ${joins}\n  WHERE ${where} AND va.category_id = ${cat}\n) t\nWHERE t.rn = 1\nORDER BY RAND()\nLIMIT ${P.nb_mots}`;\n}\nreturn [{ json: { ...base, sql } }];\n"
+      },
+      "id": "2e120272-3fb2-5f99-85bf-615791267921",
+      "name": "Préparer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "76893391-2fc0-4b50-901e-340ca2ffaf42",
+              "leftValue": "={{ !!$json.sql }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2ce1b53a-a1ed-509d-a8be-3a9984054809",
+      "name": "Base ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "6b81cdd7-07fc-5aac-8ad6-ea12f305bb26",
+      "name": "Interroger la base",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "qZ2NnMkubbTE5fNX",
+          "name": "Vocabag DB"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\n// Un item par message : { vue, texte, ... } ; vue = clavier à utiliser (sortie de « Aiguiller ») :\n// 0 langue (nouveau) · 1 langue (modifier) · 2 catégorie (nouveau) · 3 catégorie (modifier) · 4 prompt · 5 récap · 6 texte\n// · 7 rien à envoyer (notification seule)\n// « toast » : notification affichée au clic (réponse au bouton).\nconst cfg = $('Config').first().json;\nconst P = cfg.prompt;\nconst d = $('Préparer').first().json;\nconst rows = $('Interroger la base').isExecuted ? $('Interroger la base').all().map(i => i.json).filter(r => r.n || r.word_a) : [];\nconst L = c => ({ code: c, drapeau: cfg.langues[c]?.drapeau || '', nom: P.noms[c] || c });\nconst langs = d.sel ? d.sel.split('_').map(L) : [];\nconst libelle = langs.map(l => `${l.drapeau} ${l.nom}`).join(' vs ');\nconst duel = langs.length > 1;\nconst edit = !d.nouveau;\nconst item = (vue, texte, extra) => ({ json: { vue, texte, message_id: d.message_id, sel: d.sel, cat: d.cat, toast: '', ...extra } });\nconst err = d.erreur ? `⚠️ ${e(d.erreur)}\\n\\n` : '';\n\nif (d.etape === 'langue')\n  return [item(edit ? 1 : 0, `${err}✍️ <b>Prompt carrousel</b>\\n\\n1/2 — Choisis la langue, ou un duel de deux langues :`)];\n\nif (d.etape === 'categorie') {\n  const dispo = Object.fromEntries(rows.map(r => [String(r.id), Number(r.n)]));\n  const etiquettes = {};\n  for (const c of P.categories) {\n    const n = dispo[String(c.id)] || 0;\n    etiquettes[c.id] = n >= P.nb_mots ? `${c.icon} ${c.nom} (${n})` : `✖️ ${c.nom}`;\n  }\n  const nbOk = P.categories.filter(c => (dispo[String(c.id)] || 0) >= P.nb_mots).length;\n  return [item(edit ? 3 : 2,\n    `${err}✍️ <b>Prompt carrousel</b> — ${e(libelle)}\\n\\n2/2 — Choisis la catégorie ` +\n    `(${nbOk} disponible${nbOk > 1 ? 's' : ''} ; entre parenthèses : ${duel ? 'mots communs aux deux langues' : 'mots disponibles'} ; ` +\n    `✖️ = moins de ${P.nb_mots}) :`, { etiquettes })];\n}\n\n// --- prompt\nconst c = P.categories.find(x => x.id === d.cat) || { icon: '', nom: '?', slug: '' };\nif (rows.length < P.nb_mots)\n  return [item(7, '', { toast: `${c.nom} : pas assez de mots ${duel ? 'communs aux deux langues' : ''} (${rows.length}/${P.nb_mots}).` })];\nconst titre = P.titres[c.slug] || c.nom;\nconst nb = rows.length;\n// Émojis fixés par le workflow (Claude via vocabag-media, nœud « Choisir les émojis »), plus par ChatGPT.\nconst em = $('Choisir les émojis').isExecuted ? $('Choisir les émojis').first().json : {};\nif (!em.ok || !Array.isArray(em.emojis) || em.emojis.length !== nb)\n  return [item(4, `❌ Choix des émojis impossible : ${e(em.error?.message || em.error || 'réponse inattendue')}\\n` +\n                  `Réessaie avec 🔁 Autres mots (ou rechoisis la catégorie).`)];\n// Casse homogène : majuscule initiale partout ; traductions des mots sans article (« Canard », pas « le canard »).\nconst cap = t => { const s = String(t ?? '').trim(); return s ? s.charAt(0).toLocaleUpperCase('fr') + s.slice(1) : s; };\nconst sansArticle = (t, type) => type !== 'word' ? cap(t)\n  : String(t).split(/\\s*\\/\\s*/).map((x, i) => {\n      const y = x.trim().replace(/^(le|la|les|un|une|des)\\s+/i, '').replace(/^l['’]\\s*/i, '');\n      return i === 0 ? cap(y) : y;\n    }).join(' / ');\nconst translit = (w, t) => t && t.trim() && t.trim() !== String(w).trim() ? cap(t) : '';\nlet prompt;\nif (duel) {\n  // Template « versus » (2026-10-04) : bannières des deux langues, une catégorie, 10 lignes « mot | mot »,\n  // sans traduction ni drapeau devant les mots.\n  const [l1, l2] = langs;\n  prompt = [\n    'Remplis le template « versus » ci-joint. Ne modifie ni le décor, ni la mise en page, ni les couleurs, ni les polices. Génère une seule image au même format.',\n    '',\n    `Bannière haut gauche (turquoise) → ${l1.drapeau} ${l1.nom}`,\n    `Bannière haut droite (bleue) → ${l2.drapeau} ${l2.nom}`,\n    `Zone « Catégorie : » (en bas) → ${titre}`,\n    '',\n    `Lignes 1 à ${nb} : mot ${l1.nom.toLowerCase()} dans la colonne de gauche, mot ${l2.nom.toLowerCase()} dans la colonne de droite, même émoji dans les deux ronds de la ligne.`,\n    ...rows.map((r, i) => `${i + 1}. ${em.emojis[i]} ${cap(r.word_a)} | ${cap(r.word_b)}`),\n    '',\n    // Duel avec l'arabe (ary_ar) : consigne d'écriture ajoutée à la structure imposée (demande utilisateur 2026-10-04).\n    'Règles : n\\'ajoute, ne retire ni ne modifie aucun mot. Garde les accents et caractères spéciaux.' +\n      (langs.some(l => ['ar', 'ary'].includes(l.code))\n        ? ' Pour l\\'arabe : recopie caractère par caractère, dans le bon sens, lettres liées si applicable.' : '') +\n      ' Texte lisible, centré verticalement dans chaque ligne, sans déborder. Les numéros centraux et le « VS » restent inchangés.',\n  ].join('\\n');\n} else {\n  // Template « 1 langue » : zone « Catégorie : » (drapeau + titre), une ligne courte par mot avec traduction.\n  const l = langs[0];\n  const avecTranslit = rows.some(r => translit(r.word_a, r.translit_a));\n  const special = ['ar', 'ary', 'zh', 'ko', 'ru'].includes(l.code)\n    ? ` Pour ${['ar', 'ary'].includes(l.code) ? 'l\\'arabe' : 'l\\'alphabet non latin'} : recopie caractère par caractère, dans le bon sens, lettres liées si applicable.` : '';\n  prompt = [\n    'Remplis le template ci-joint. Ne modifie ni le décor, ni la mise en page, ni les couleurs, ni les polices. Génère une seule image au même format.',\n    '',\n    `Zone « Catégorie : » → ${`${l.drapeau} ${titre} ${P.en[l.code] || ''}`.trim()}`,\n    '',\n    `Lignes 1 à ${nb}, une par mot, format : émoji · mot${avecTranslit ? ' · (prononciation)' : ''} · traduction`,\n    ...rows.map((r, i) => {\n      const t = translit(r.word_a, r.translit_a);\n      return `${i + 1}. ${em.emojis[i]} ${cap(r.word_a)}${t ? ` · (${t})` : ''} · ${sansArticle(r.translation, r.type)}`;\n    }),\n    '',\n    `Règles : n'ajoute, ne retire ni ne modifie aucun mot ni émoji. Garde les accents et caractères spéciaux.${special} Texte lisible, centré verticalement dans chaque ligne, sans déborder.`,\n  ].join('\\n');\n}\nconst recap = `✍️ ${e(libelle)} · ${e(c.icon)} ${e(titre)} — ${nb} ${duel ? 'paires' : 'mots'}`;\nconst out = [];\nif (edit) out.push(item(5, `${recap}\\n\\nPrompt ci-dessous 👇`));\n// Message = le prompt seul (appui = copie), sans en-tête ni note autour.\nout.push(item(4, `<pre>${e(prompt)}</pre>`));\nreturn out;\n"
+      },
+      "id": "08fcdca8-7888-5b73-a02a-18e3baf87b2f",
+      "name": "Composer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Étape « prompt » avec assez de mots : sens en français envoyés au choix des émojis (un par ligne).\nconst cfg = $('Config').first().json;\nconst d = $('Préparer').first().json;\nif (d.etape !== 'prompt') return [{ json: { skip: true } }];\nconst rows = $('Interroger la base').all().map(i => i.json).filter(r => r.word_a);\nif (rows.length < cfg.prompt.nb_mots) return [{ json: { skip: true } }];\nconst c = cfg.prompt.categories.find(x => x.id === d.cat) || {};\nconst mots = rows.map(r => String(r.translation).replace(/^(le|la|les|un|une|des)\\s+/i, '').replace(/^l['’]\\s*/i, ''));\nreturn [{ json: { skip: false, corps: { mots, categorie: c.nom || '' } } }];\n"
+      },
+      "id": "3ae73285-7ad2-5b65-ab8b-e334982d39b1",
+      "name": "Demande émojis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        990,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "55dc5321-df97-4c01-837b-5e63d34d7c79",
+              "leftValue": "={{ $json.skip !== true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e3026eef-d36c-5da5-96de-93f30d056182",
+      "name": "Émojis ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Le choix des émojis prend quelques secondes : on répond tout de suite au bouton avec une notification d'attente.\nconst d = $('Préparer').first().json;\nreturn d.callback_query_id ? [{ json: { callback_query_id: d.callback_query_id } }] : [];\n"
+      },
+      "id": "47dd32c7-1621-5e8b-93c1-9223c169ea86",
+      "name": "Attente ?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1210,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "operation": "answerQuery",
+        "queryId": "={{ $json.callback_query_id }}",
+        "additionalFields": {
+          "text": "⏳ Choix des émojis…"
+        }
+      },
+      "id": "0fc682cf-5578-5b32-8d29-07b6042b1f51",
+      "name": "Patienter",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1430,
+        -300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.media_service }}/emojis",
+        "options": {
+          "timeout": 180000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.corps) }}"
+      },
+      "id": "6cd4928e-bbb8-5938-8865-bbf10af42eac",
+      "name": "Choisir les émojis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1210,
+        -100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L2zYP3cEvAgZVffN",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Réponse au bouton (obligatoire pour Telegram, sinon le bouton reste « en chargement »), avec la notification éventuelle.\n// Déjà faite par « Patienter » quand les émojis ont été demandés.\nconst d = $('Préparer').first().json;\nif (!d.callback_query_id || $('Choisir les émojis').isExecuted) return [];\nreturn [{ json: { callback_query_id: d.callback_query_id, toast: $('Composer').first().json.toast || '' } }];\n"
+      },
+      "id": "4d4afd77-df62-5cd2-ac79-36dae0575b47",
+      "name": "Clic ?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        -150
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "operation": "answerQuery",
+        "queryId": "={{ $json.callback_query_id }}",
+        "additionalFields": {
+          "text": "={{ $json.toast }}",
+          "show_alert": "={{ !!$json.toast }}"
+        }
+      },
+      "id": "f2a81cf8-ba01-5252-b864-836845c82752",
+      "name": "Accuser réception",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        -150
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "expression",
+        "numberOutputs": 8,
+        "output": "={{ $json.vue }}",
+        "options": {}
+      },
+      "id": "89244ce4-9ec8-5319-9457-455be7db4ed9",
+      "name": "Aiguiller",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1320,
+        150
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        },
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇸🇦 Arabe",
+                    "additionalFields": {
+                      "callback_data": "cp:l:ar"
+                    }
+                  },
+                  {
+                    "text": "🇲🇦 Darija",
+                    "additionalFields": {
+                      "callback_data": "cp:l:ary"
+                    }
+                  },
+                  {
+                    "text": "🇩🇪 Allemand",
+                    "additionalFields": {
+                      "callback_data": "cp:l:de"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇬🇧 Anglais",
+                    "additionalFields": {
+                      "callback_data": "cp:l:en"
+                    }
+                  },
+                  {
+                    "text": "🇪🇸 Espagnol",
+                    "additionalFields": {
+                      "callback_data": "cp:l:es"
+                    }
+                  },
+                  {
+                    "text": "🇮🇹 Italien",
+                    "additionalFields": {
+                      "callback_data": "cp:l:it"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇰🇷 Coréen",
+                    "additionalFields": {
+                      "callback_data": "cp:l:ko"
+                    }
+                  },
+                  {
+                    "text": "🇳🇱 Néerlandais",
+                    "additionalFields": {
+                      "callback_data": "cp:l:nl"
+                    }
+                  },
+                  {
+                    "text": "🇧🇷 Portugais",
+                    "additionalFields": {
+                      "callback_data": "cp:l:pt"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇷🇺 Russe",
+                    "additionalFields": {
+                      "callback_data": "cp:l:ru"
+                    }
+                  },
+                  {
+                    "text": "🇹🇷 Turc",
+                    "additionalFields": {
+                      "callback_data": "cp:l:tr"
+                    }
+                  },
+                  {
+                    "text": "🇨🇳 Chinois",
+                    "additionalFields": {
+                      "callback_data": "cp:l:zh"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇲🇦 vs 🇸🇦 Darija / Arabe",
+                    "additionalFields": {
+                      "callback_data": "cp:l:ary_ar"
+                    }
+                  },
+                  {
+                    "text": "🇩🇪 vs 🇳🇱 Allemand / Néerl.",
+                    "additionalFields": {
+                      "callback_data": "cp:l:de_nl"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇪🇸 vs 🇮🇹 Espagnol / Italien",
+                    "additionalFields": {
+                      "callback_data": "cp:l:es_it"
+                    }
+                  },
+                  {
+                    "text": "🇪🇸 vs 🇧🇷 Espagnol / Portugais",
+                    "additionalFields": {
+                      "callback_data": "cp:l:es_pt"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇮🇹 vs 🇧🇷 Italien / Portugais",
+                    "additionalFields": {
+                      "callback_data": "cp:l:it_pt"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "id": "86323bdb-1275-5e32-863e-75139d00af20",
+      "name": "Langues (nouveau)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        0
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "messageType": "message",
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "messageId": "={{ $json.message_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        },
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇸🇦 Arabe",
+                    "additionalFields": {
+                      "callback_data": "cp:l:ar"
+                    }
+                  },
+                  {
+                    "text": "🇲🇦 Darija",
+                    "additionalFields": {
+                      "callback_data": "cp:l:ary"
+                    }
+                  },
+                  {
+                    "text": "🇩🇪 Allemand",
+                    "additionalFields": {
+                      "callback_data": "cp:l:de"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇬🇧 Anglais",
+                    "additionalFields": {
+                      "callback_data": "cp:l:en"
+                    }
+                  },
+                  {
+                    "text": "🇪🇸 Espagnol",
+                    "additionalFields": {
+                      "callback_data": "cp:l:es"
+                    }
+                  },
+                  {
+                    "text": "🇮🇹 Italien",
+                    "additionalFields": {
+                      "callback_data": "cp:l:it"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇰🇷 Coréen",
+                    "additionalFields": {
+                      "callback_data": "cp:l:ko"
+                    }
+                  },
+                  {
+                    "text": "🇳🇱 Néerlandais",
+                    "additionalFields": {
+                      "callback_data": "cp:l:nl"
+                    }
+                  },
+                  {
+                    "text": "🇧🇷 Portugais",
+                    "additionalFields": {
+                      "callback_data": "cp:l:pt"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇷🇺 Russe",
+                    "additionalFields": {
+                      "callback_data": "cp:l:ru"
+                    }
+                  },
+                  {
+                    "text": "🇹🇷 Turc",
+                    "additionalFields": {
+                      "callback_data": "cp:l:tr"
+                    }
+                  },
+                  {
+                    "text": "🇨🇳 Chinois",
+                    "additionalFields": {
+                      "callback_data": "cp:l:zh"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇲🇦 vs 🇸🇦 Darija / Arabe",
+                    "additionalFields": {
+                      "callback_data": "cp:l:ary_ar"
+                    }
+                  },
+                  {
+                    "text": "🇩🇪 vs 🇳🇱 Allemand / Néerl.",
+                    "additionalFields": {
+                      "callback_data": "cp:l:de_nl"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇪🇸 vs 🇮🇹 Espagnol / Italien",
+                    "additionalFields": {
+                      "callback_data": "cp:l:es_it"
+                    }
+                  },
+                  {
+                    "text": "🇪🇸 vs 🇧🇷 Espagnol / Portugais",
+                    "additionalFields": {
+                      "callback_data": "cp:l:es_pt"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🇮🇹 vs 🇧🇷 Italien / Portugais",
+                    "additionalFields": {
+                      "callback_data": "cp:l:it_pt"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "id": "39ac1319-bde4-5290-aa4b-89c7da1e0c92",
+      "name": "Langues (modifier)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        150
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        },
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['1'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:1"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['2'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:2"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['3'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:3"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['4'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:4"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['5'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:5"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['6'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:6"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['7'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:7"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['8'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:8"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['9'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:9"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['10'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:10"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['11'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:11"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['12'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:12"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['13'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:13"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['14'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:14"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['15'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:15"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['16'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:16"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['17'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:17"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['18'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:18"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['19'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:19"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['20'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:20"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['21'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:21"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "⬅️ Langues",
+                    "additionalFields": {
+                      "callback_data": "cp:b"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "id": "c250282f-4929-59e0-a7da-7ed8407856cf",
+      "name": "Catégories (nouveau)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "messageType": "message",
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "messageId": "={{ $json.message_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        },
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['1'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:1"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['2'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:2"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['3'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:3"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['4'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:4"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['5'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:5"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['6'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:6"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['7'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:7"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['8'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:8"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['9'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:9"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['10'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:10"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['11'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:11"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['12'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:12"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['13'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:13"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['14'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:14"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['15'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:15"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['16'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:16"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['17'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:17"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['18'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:18"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['19'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:19"
+                    }
+                  },
+                  {
+                    "text": "={{ $json.etiquettes['20'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:20"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "={{ $json.etiquettes['21'] }}",
+                    "additionalFields": {
+                      "callback_data": "=cp:c:{{ $json.sel }}:21"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "⬅️ Langues",
+                    "additionalFields": {
+                      "callback_data": "cp:b"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "id": "1a643b06-e276-5b65-95ce-b89ca21cc6ab",
+      "name": "Catégories (modifier)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        450
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        },
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🔁 Autres mots",
+                    "additionalFields": {
+                      "callback_data": "=cpn:c:{{ $json.sel }}:{{ $json.cat }}"
+                    }
+                  },
+                  {
+                    "text": "📚 Autre catégorie",
+                    "additionalFields": {
+                      "callback_data": "=cpn:l:{{ $json.sel }}"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🌍 Autre langue",
+                    "additionalFields": {
+                      "callback_data": "cpn:b"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "id": "5bf4b267-2b03-5200-b576-ea2483e86b9e",
+      "name": "Prompt",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        600
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "messageType": "message",
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "messageId": "={{ $json.message_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        },
+        "replyMarkup": "none"
+      },
+      "id": "d99649f9-72a0-5c66-947c-4e1d9ae13b88",
+      "name": "Récapitulatif",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        750
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "d1ef23a1-862c-5c70-9d21-2a14e5d276dd",
+      "name": "Texte",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        900
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Entrée": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Préparer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer": {
+      "main": [
+        [
+          {
+            "node": "Base ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Base ?": {
+      "main": [
+        [
+          {
+            "node": "Interroger la base",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Composer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interroger la base": {
+      "main": [
+        [
+          {
+            "node": "Demande émojis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Demande émojis": {
+      "main": [
+        [
+          {
+            "node": "Émojis ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Émojis ?": {
+      "main": [
+        [
+          {
+            "node": "Attente ?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Choisir les émojis",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Composer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attente ?": {
+      "main": [
+        [
+          {
+            "node": "Patienter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Choisir les émojis": {
+      "main": [
+        [
+          {
+            "node": "Composer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Composer": {
+      "main": [
+        [
+          {
+            "node": "Clic ?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Aiguiller",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clic ?": {
+      "main": [
+        [
+          {
+            "node": "Accuser réception",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aiguiller": {
+      "main": [
+        [
+          {
+            "node": "Langues (nouveau)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Langues (modifier)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Catégories (nouveau)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Catégories (modifier)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Récapitulatif",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Texte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "VbErreursAlerte1"
+  },
+  "pinData": {},
+  "tags": []
+}

@@ -1,0 +1,4269 @@
+{
+  "id": "VbSocialStories1",
+  "name": "VocaBag Social - Stories",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "721e1e49-a4d8-523a-902e-b76ff5bd809b",
+      "name": "Chaque heure",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vb-stories-test",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "586878e3-fc6b-53cc-9ca8-1a0ca39f1b66",
+      "name": "Test",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VbMediaToken0001",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "webhookId": "2f105b58-c95e-5c21-a74e-1bc10fc811c3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// CONFIGURATION de ce workflow — modifier ici. Les secrets restent dans les credentials n8n.\nreturn [{ json: {\n  // --- Telegram : seul ce chat peut piloter le bot et reçoit les messages\n  telegram_chat_id: '6980427615',\n\n  // --- Instagram (API Instagram avec connexion Instagram : jeton « IG… », graph.instagram.com)\n  ig_api: 'https://graph.instagram.com/v23.0',\n  max_carrousel: 10,          // limite actuelle de l'API (documentation Content Publishing)\n  min_carrousel: 2,\n  poll_max: 60,               // vérifications du statut du conteneur (x poll_attente_s)\n  poll_attente_s: 5,\n\n  // --- Service média local (conversion, rendu HTML→image, hébergement public, blog)\n  media_service: 'http://host.docker.internal:8791',\n\n  // --- Stories : heure (Europe/Paris, 'HH') → action. Le Reel sort vers 15h15 (Vocabag Video, lancé à 15h) :\n  //     les stories suivent, dans la/les langue(s) du Reel, avec un mot (ou une paire, en duel) tiré du Reel.\n  story_creneaux: { '16': 'reel', '18': 'question', '21': 'reponse' },\n  story_forcer_action: '',    // test : 'question' | 'reponse' | 'reel' (ignore l'heure). Remettre '' après.\n  exclusions: { story_mots: 60 },   // les 60 derniers mots ne reviennent pas\n  story_langues: [            // langues des questions en story, tirées au sort (poids)\n    { code: 'ary', poids: 25 }, { code: 'ar', poids: 15 }, { code: 'zh', poids: 10 },\n    { code: 'en', poids: 8 }, { code: 'es', poids: 8 }, { code: 'de', poids: 7 }, { code: 'ko', poids: 7 },\n    { code: 'it', poids: 5 }, { code: 'pt', poids: 5 }, { code: 'tr', poids: 4 }, { code: 'ru', poids: 3 },\n    { code: 'nl', poids: 3 },\n  ],\n\n  // --- Langues apprises : code VocaBag ⇄ noms acceptés dans la légende Telegram / les tables\n  langues: {\n    ary: { nom: 'darija',            drapeau: '🇲🇦', alias: ['ary', 'darija', 'marocain', 'moroccan'] },\n    ar:  { nom: 'arabe littéraire',  drapeau: '🇸🇦', alias: ['ar', 'arabe', 'arabic', 'msa', 'fusha'] },\n    zh:  { nom: 'chinois',           drapeau: '🇨🇳', alias: ['zh', 'chinois', 'chinese', 'mandarin'] },\n    en:  { nom: 'anglais',           drapeau: '🇬🇧', alias: ['en', 'anglais', 'english'] },\n    de:  { nom: 'allemand',          drapeau: '🇩🇪', alias: ['de', 'allemand', 'german'] },\n    es:  { nom: 'espagnol',          drapeau: '🇪🇸', alias: ['es', 'espagnol', 'spanish'] },\n    pt:  { nom: 'portugais',         drapeau: '🇧🇷', alias: ['pt', 'portugais', 'portuguese'] },\n    it:  { nom: 'italien',           drapeau: '🇮🇹', alias: ['it', 'italien', 'italian'] },\n    nl:  { nom: 'néerlandais',       drapeau: '🇳🇱', alias: ['nl', 'neerlandais', 'néerlandais', 'dutch'] },\n    ru:  { nom: 'russe',             drapeau: '🇷🇺', alias: ['ru', 'russe', 'russian'] },\n    tr:  { nom: 'turc',              drapeau: '🇹🇷', alias: ['tr', 'turc', 'turkish'] },\n    ko:  { nom: 'coréen',            drapeau: '🇰🇷', alias: ['ko', 'coreen', 'coréen', 'korean'] },\n  },\n} }];\n"
+      },
+      "id": "15551d3e-4e55-5371-a83e-17cb7ecc141e",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Les horaires sont définis dans Config → story_creneaux (heure Paris → action).\n// Déclencheur « Test » : l'action demandée dans le corps passe avant tout.\nconst cfg = $('Config').first().json;\nconst heure = $now.setZone('Europe/Paris').toFormat('HH');\nconst test = $('Test').isExecuted ? String($('Test').first().json.body?.action || '') : '';\nif (test && !['question', 'reponse', 'reel'].includes(test)) return [];\nconst action = test || cfg.story_forcer_action || cfg.story_creneaux[heure];\nif (!action) return [];\nconst jour = $now.setZone('Europe/Paris').toFormat('yyyy-MM-dd');\nreturn [{ json: { action, jour, source_ref: `story-${action}-${jour}` } }];\n"
+      },
+      "id": "f3ef498f-70b2-5403-907e-f85566fda60d",
+      "name": "Créneau",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_journal"
+        },
+        "returnAll": true,
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "source_ref",
+              "condition": "eq",
+              "keyValue": "={{ $json.source_ref }}"
+            },
+            {
+              "keyName": "statut",
+              "condition": "eq",
+              "keyValue": "ok"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b6a75f6a-be61-5f8c-8a9f-8c6c21650f41",
+      "name": "Déjà publiée ?",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        0
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "if ($input.all().some(i => i.json.post_id)) return [];   // déjà faite aujourd'hui (relance, test…)\nreturn [{ json: $('Créneau').first().json }];\n"
+      },
+      "id": "ace5fff3-8307-56ac-8ad9-54b642aaa48f",
+      "name": "Aiguiller",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "82b7928c-d649-49bf-9a6f-869bfa5f0ba6",
+              "leftValue": "={{ $json.action === 'question' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4077dafc-15ec-5b87-95ac-62a5dcfa4b74",
+      "name": "Question ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "18e8e3f2-63ce-4b35-a15c-15f92df9d874",
+              "leftValue": "={{ $json.action === 'reponse' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e503de26-a132-59d0-9efa-06502ea46887",
+      "name": "Réponse ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1bdc2d2d-e06a-4a09-8479-51538d137744",
+              "leftValue": "={{ $json.action === 'reel' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e4aff32a-43c1-5b13-8704-86a1bb743dbc",
+      "name": "Reel ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_story_mots"
+        },
+        "returnAll": true,
+        "options": {}
+      },
+      "id": "847179c5-00e6-57fa-b394-1c95d1a3d737",
+      "name": "Mots récents",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        -200
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mot tiré directement de la base VocaBag (mots validés, traduction FR), hors mots récents.\n// Aucun texte généré par IA : mot, traduction et translittération viennent de la base.\nconst cfg = $('Config').first().json;\nconst total = cfg.story_langues.reduce((s, l) => s + l.poids, 0);\nlet r = Math.random() * total, code = cfg.story_langues[0].code;\nfor (const l of cfg.story_langues) { if ((r -= l.poids) < 0) { code = l.code; break; } }\ncode = code.replace(/[^a-z]/g, '');\nconst recents = $input.all().map(i => i.json).filter(j => j.vocabulary_id)\n  .sort((a, b) => String(b.derniere_utilisation).localeCompare(String(a.derniere_utilisation)))\n  .slice(0, cfg.exclusions.story_mots).map(j => parseInt(j.vocabulary_id, 10)).filter(Number.isInteger);\nconst exclure = recents.length ? `AND v.id NOT IN (${recents.join(',')})` : '';\nconst sql = `SELECT v.id, v.word, v.transliteration, t.translation, l.code\nFROM vocabulary v\nJOIN languages l ON l.id = v.language_id\nJOIN categories c ON c.id = v.category_id\nJOIN vocabulary_translations t ON t.vocabulary_id = v.id AND t.target_locale = 'fr'\nWHERE l.code = '${code}' AND v.active = 1 AND v.needs_validation = 0 AND v.type = 'word'\n  AND c.slug NOT LIKE '%religion%'\n  AND CHAR_LENGTH(v.word) <= 18 AND CHAR_LENGTH(t.translation) <= 26\n  ${exclure}\nORDER BY RAND() LIMIT 1`;\nreturn [{ json: { sql, code } }];\n"
+      },
+      "id": "4464e9ad-a75f-5027-ac52-a3714f0fea93",
+      "name": "Requête mot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {}
+      },
+      "id": "49beb082-c76e-5353-aa05-5ee413ab75d5",
+      "name": "Tirer un mot",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        1760,
+        -200
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "qZ2NnMkubbTE5fNX",
+          "name": "Vocabag DB"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// Repli (pas de Reel publié aujourd'hui) : mot tiré au hasard dans les langues pondérées.\nconst m = $json;\nif (!m.id) throw new Error('aucun mot trouvé pour ' + $('Requête mot').first().json.code);\nreturn [{ json: { source: 'hasard', mots: [{ id: m.id, word: m.word, transliteration: m.transliteration,\n                                            translation: m.translation, code: m.code }] } }];\n"
+      },
+      "id": "a9fa9b04-2dc1-5eab-8878-299cda80aa05",
+      "name": "Mot au hasard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {},
+        "query": "SELECT v.id, v.word, v.transliteration, t.translation, l.code, vv.genre, j.ord FROM vocabag_videos vv CROSS JOIN JSON_TABLE(vv.word_ids, '$[*]' COLUMNS (ord FOR ORDINALITY, wid INT PATH '$')) j JOIN vocabulary v ON v.id = j.wid JOIN languages l ON l.id = v.language_id JOIN vocabulary_translations t ON t.vocabulary_id = v.id AND t.target_locale = 'fr' WHERE vv.id = (SELECT MAX(id) FROM vocabag_videos WHERE (posted_on_youtube = 1 OR posted_on_instagram = 1 OR posted_on_facebook = 1) AND created_at >= NOW() - INTERVAL 20 HOUR) ORDER BY j.ord"
+      },
+      "id": "fb05ad84-b444-51ee-b409-a12f3847b61e",
+      "name": "Mots du reel",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        1320,
+        -450
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "qZ2NnMkubbTE5fNX",
+          "name": "Vocabag DB"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "// word_ids du Reel : solo = [id…] ; duel = [A1, B1, A2, B2…] (paires côte à côte). On tire un mot, ou une paire.\nconst rows = $input.all().map(i => i.json).filter(r => r && r.id);\nif (!rows.length) return [{ json: { source: 'hasard', mots: [] } }];\nconst pick = a => a[Math.floor(Math.random() * a.length)];\nconst m = r => ({ id: r.id, word: r.word, transliteration: r.transliteration, translation: r.translation, code: r.code });\nif (rows[0].genre === 'duel') {\n  const paires = {};\n  for (const r of rows) (paires[Math.floor((Number(r.ord) - 1) / 2)] ??= []).push(r);\n  const ok = Object.values(paires).filter(p => p.length === 2 && p[0].code !== p[1].code);\n  if (ok.length) return [{ json: { source: 'reel', genre: 'duel', mots: pick(ok).map(m) } }];\n}\nreturn [{ json: { source: 'reel', genre: rows[0].genre, mots: [m(pick(rows))] } }];\n"
+      },
+      "id": "28e9ad56-46e8-56e6-ab25-a8c09c4eff90",
+      "name": "Choisir dans le reel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        -450
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "bc43c21a-5695-408d-89af-d207135505d2",
+              "leftValue": "={{ $json.mots.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c9e27ec6-255c-5da8-8157-7577ca2495bc",
+      "name": "Mot du reel ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        -450
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1 mot : « Comment dit-on « X » en turc ? » ; 2 mots (duel) : « … en darija et en arabe littéraire ? ».\nconst cfg = $('Config').first().json;\nconst d = $json;\nconst L = c => cfg.langues[c] || { nom: c, drapeau: '' };\nconst [a, b] = d.mots;\nreturn [{ json: { mots: d.mots, source: d.source, rendu: { template: 'question', data: {\n  traduction: a.translation,\n  langue_nom: b ? `${L(a.code).nom} et en ${L(b.code).nom}` : L(a.code).nom,\n  drapeau: b ? L(a.code).drapeau + L(b.code).drapeau : L(a.code).drapeau,\n  langue_code: a.code } } } }];\n"
+      },
+      "id": "6dfc649b-ca6f-5857-9d2d-aad42839bf8e",
+      "name": "Données question",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        -200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.media_service }}/render",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rendu) }}"
+      },
+      "id": "645c0f22-e053-5334-b682-b68569691e67",
+      "name": "Rendre question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        -200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VbMediaToken0001",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('Créneau').first().json, d = $('Données question').first().json;\nreturn [{ json: { type: 'story', images: [$json.url], video: '', texte: '', langue_description: 'fr',\n                  langue_apprise: d.mots.map(m => m.code).join('+'), source: 'stories', source_ref: c.source_ref, desc_ids: {} } }];\n"
+      },
+      "id": "b1343d61-ed41-5d9c-a773-02212d1eb40a",
+      "name": "Story question",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2420,
+        -200
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0db458ed-bdec-5737-9323-2512df9a87d2",
+      "name": "Publier story",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3300,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "2780ecf6-3dd5-45ea-b43d-0f6b01182c1d",
+              "leftValue": "={{ $json.ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "00678dff-5808-5286-a151-aca62feebc5e",
+      "name": "Story publiée ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "68b0ca2f-ea7f-42bb-86a7-9756414b79a1",
+              "leftValue": "={{ $('Créneau').first().json.action === 'question' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a85f3202-cc03-5697-8203-2849d4e4f590",
+      "name": "Après question ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3740,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "fa1c2976-3e1c-44aa-ac0f-5896f7ea0dfe",
+              "leftValue": "={{ $('Créneau').first().json.action === 'reponse' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b644f186-27ab-52af-8c4b-cb21dd7d4266",
+      "name": "Après réponse ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Une ligne par mot (2 en duel) : la réponse de 21h les relit toutes.\nconst c = $('Créneau').first().json;\nreturn $('Données question').first().json.mots.map(m => ({ json: {\n  vocabulary_id: m.id, mot: m.word, langue_apprise: m.code, traduction: m.translation,\n  translitteration: m.transliteration || '', jour: c.jour } }));\n"
+      },
+      "id": "2962f923-e960-51d7-9ac0-2202eb552eac",
+      "name": "Lignes à mémoriser",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_story_mots"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "vocabulary_id": "={{ $json.vocabulary_id }}",
+            "mot": "={{ $json.mot }}",
+            "langue_apprise": "={{ $json.langue_apprise }}",
+            "traduction": "={{ $json.traduction }}",
+            "translitteration": "={{ $json.translitteration }}",
+            "derniere_utilisation": "={{ new Date().toISOString() }}",
+            "statut": "question_publiee",
+            "jour": "={{ $json.jour }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "vocabulary_id",
+              "displayName": "vocabulary_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "mot",
+              "displayName": "mot",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "langue_apprise",
+              "displayName": "langue_apprise",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "traduction",
+              "displayName": "traduction",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "translitteration",
+              "displayName": "translitteration",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "derniere_utilisation",
+              "displayName": "derniere_utilisation",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "statut",
+              "displayName": "statut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "jour",
+              "displayName": "jour",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f90494b1-cf14-5e67-94b1-2254cc9c9fc6",
+      "name": "Mémoriser mot",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4180,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_story_mots"
+        },
+        "returnAll": true,
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "jour",
+              "condition": "eq",
+              "keyValue": "={{ $json.jour }}"
+            },
+            {
+              "keyName": "statut",
+              "condition": "eq",
+              "keyValue": "question_publiee"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5628054b-4ff8-56db-b3f3-aec23c90ae2c",
+      "name": "Question du jour",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        100
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config').first().json;\nconst qs = $input.all().map(i => i.json).filter(j => j.vocabulary_id).sort((a, b) => a.id - b.id);\nif (!qs.length) return [];   // pas de question publiée aujourd'hui → rien à répondre\nconst L = c => cfg.langues[c] || { nom: c, drapeau: '' };\nconst q = qs[0];\nif (qs.length >= 2) {        // duel : les deux mots, chacun avec sa langue\n  return [{ json: { q, langues: qs.map(x => x.langue_apprise).join('+'), rendu: { template: 'answer_duel', data: {\n    traduction: q.traduction,\n    mots: qs.slice(0, 2).map(x => ({ mot: x.mot, translitteration: x.translitteration, langue_code: x.langue_apprise,\n                                     langue_nom: L(x.langue_apprise).nom, drapeau: L(x.langue_apprise).drapeau })) } } } }];\n}\nconst l = L(q.langue_apprise);\nreturn [{ json: { q, langues: q.langue_apprise, rendu: { template: 'answer', data: {\n  traduction: q.traduction, mot: q.mot, translitteration: q.translitteration,\n  langue_nom: l.nom, drapeau: l.drapeau, langue_code: q.langue_apprise } } } }];\n"
+      },
+      "id": "21787b86-8d52-589c-a2c5-05afc6fa0fe4",
+      "name": "Données réponse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.media_service }}/render",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rendu) }}"
+      },
+      "id": "590eea34-2a1d-5d46-9945-5578d2c2ed58",
+      "name": "Rendre réponse",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VbMediaToken0001",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('Créneau').first().json, r = $('Données réponse').first().json;\nreturn [{ json: { type: 'story', images: [$json.url], video: '', texte: '', langue_description: 'fr',\n                  langue_apprise: r.langues, source: 'stories', source_ref: c.source_ref, desc_ids: {} } }];\n"
+      },
+      "id": "0f13abb6-c9f0-50c3-ae1a-f823094e8e4d",
+      "name": "Story réponse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_story_mots"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "jour",
+              "condition": "eq",
+              "keyValue": "={{ $('Créneau').first().json.jour }}"
+            },
+            {
+              "keyName": "statut",
+              "condition": "eq",
+              "keyValue": "question_publiee"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "statut": "reponse_publiee"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "statut",
+              "displayName": "statut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "43324a6a-425c-5073-9617-a2165dbe61ef",
+      "name": "Marquer répondu",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4180,
+        1000
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_story_mots"
+        },
+        "returnAll": true,
+        "options": {}
+      },
+      "id": "4f80b05e-0dd0-587e-9100-f06cd9dd3c7f",
+      "name": "Derniers mots",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        4400,
+        1000
+      ],
+      "executeOnce": true,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// « Apprends ces mots sur VocaBag » : le mot du jour + jusqu'à 3 mots récents (écritures natives).\nconst rows = $input.all().map(i => i.json).filter(j => j.mot)\n  .sort((a, b) => String(b.derniere_utilisation).localeCompare(String(a.derniere_utilisation))).slice(0, 4);\nreturn [{ json: { rendu: { template: 'cta', data: {\n  mots: rows.map(r => ({ mot: r.mot, traduction: r.traduction, langue_code: r.langue_apprise })) } } } }];\n"
+      },
+      "id": "29d6f6ff-20ef-5245-88ba-cfa67b5f24ba",
+      "name": "Données visuel final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4620,
+        1000
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.media_service }}/render",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.rendu) }}"
+      },
+      "id": "a4b2c918-417e-564f-b22c-e4e8e2bde0ef",
+      "name": "Rendre visuel final",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4840,
+        1000
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VbMediaToken0001",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('Créneau').first().json;\nreturn [{ json: { type: 'story', images: [$json.url], video: '', texte: '', langue_description: 'fr',\n                  langue_apprise: '', source: 'stories', source_ref: `story-cta-${c.jour}`, desc_ids: {} } }];\n"
+      },
+      "id": "1f7a65d3-c4fd-52e3-a0de-b0da068838dc",
+      "name": "Story visuel final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5060,
+        1000
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "e02f6f4c-e209-5a1a-8e98-d97a23fd04af",
+      "name": "Publier visuel final",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        5280,
+        1000
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "options": {},
+        "query": "SELECT folder FROM vocabag_videos WHERE (posted_on_youtube = 1 OR posted_on_instagram = 1 OR posted_on_facebook = 1) AND created_at >= NOW() - INTERVAL 20 HOUR ORDER BY id DESC LIMIT 1"
+      },
+      "id": "8ea98244-6dcf-5736-a5e9-288c6176c6e1",
+      "name": "Reel du jour",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        1760,
+        400
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "qZ2NnMkubbTE5fNX",
+          "name": "Vocabag DB"
+        }
+      },
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const f = String($json.folder || '').replace(/[^A-Za-z0-9_]/g, '');\nif (!f) return [{ json: { absent: true } }];\nreturn [{ json: { absent: false, chemin: `/files/vocabag/${f}_final_sound.mp4`, folder: f } }];\n"
+      },
+      "id": "5db2ecec-1156-5d3c-a933-a6c466dde045",
+      "name": "Fichier du reel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "39b30cab-8e0f-4808-92b0-8c05742dfa1a",
+              "leftValue": "={{ !$json.absent }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ad37ae97-de19-5b81-bc5e-795debabb5ab",
+      "name": "Reel trouvé ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $json.chemin }}",
+        "options": {}
+      },
+      "id": "fa45129f-f627-5d44-a69c-425b2e44209b",
+      "name": "Lire vidéo",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        2420,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.media_service }}/stage?ext=mp4",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data"
+      },
+      "id": "446e44d4-8318-5a3a-ac00-56319b16367d",
+      "name": "Héberger vidéo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "VbMediaToken0001",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('Créneau').first().json;\nreturn [{ json: { type: 'story', images: [], video: $json.url, texte: '', langue_description: 'fr',\n                  langue_apprise: '', source: 'stories', source_ref: c.source_ref,\n                  desc_ids: {} } }];\n"
+      },
+      "id": "ef6b7767-3473-5795-98b2-d73684d5cb02",
+      "name": "Story reel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "6c885d53-9ffb-57b2-a89d-fc38445e6d97",
+      "name": "Entrée · IG story",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        3300,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format commun : { type: reel|carrousel|story|post, images[], video, texte, langue_description,\n//                   langue_apprise, source, source_ref, desc_ids }  →  un conteneur par média.\nconst cfg = $('Config').first().json;\nconst req = $('Entrée · IG story').first().json;\nconst type = String(req.type || '').toLowerCase();\nconst images = (req.images || []).filter(Boolean);\nconst caption = String(req.texte || '');\nconst fail = m => [{ json: { _ok: false, erreur: m } }];\nlet items = [];\nif (type === 'carrousel') {\n  if (images.length < cfg.min_carrousel) return fail(`carrousel : ${images.length} image(s), minimum ${cfg.min_carrousel}`);\n  if (images.length > cfg.max_carrousel) return fail(`carrousel : ${images.length} images, maximum de l'API ${cfg.max_carrousel}`);\n  items = images.map(u => ({ image_url: u, is_carousel_item: true }));\n} else if (type === 'post') {\n  if (images.length !== 1) return fail('post : exactement 1 image attendue');\n  items = [{ image_url: images[0], caption }];\n} else if (type === 'story') {\n  if (req.video) items = [{ media_type: 'STORIES', video_url: req.video }];\n  else if (images.length === 1) items = [{ media_type: 'STORIES', image_url: images[0] }];\n  else return fail('story : 1 image ou 1 vidéo attendue');\n} else if (type === 'reel') {\n  if (!req.video) return fail('reel : vidéo manquante');\n  items = [{ media_type: 'REELS', video_url: req.video, caption }];\n} else return fail(`type inconnu : « ${type} »`);\nif (caption.length > 2200) return fail(`légende trop longue (${caption.length}/2200 caractères)`);\nconst nTags = (caption.match(/#[^\\s#]+/g) || []).length;\nif (nTags > 30) return fail(`${nTags} hashtags (Instagram : 30 max)`);\nreturn items.map(params => ({ json: { _ok: true, params } }));\n"
+      },
+      "id": "df33b574-9bf3-59cd-a6a9-967b147d56ad",
+      "name": "Préparer conteneurs · IG story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3740,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "5cee8874-45a2-443f-97a4-6ab61ab8bc40",
+              "leftValue": "={{ $json._ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a2a9a308-ffaa-5bec-9003-3c9fa0e2e3b2",
+      "name": "Entrée valide ? · IG story",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.ig_api }}/me/media",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.params) }}"
+      },
+      "id": "7c6606c8-8eaf-5466-8004-d78967414deb",
+      "name": "Créer conteneur · IG story",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4180,
+        1500
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Entrée · IG story').first().json;\nconst ids = [], errs = [];\nfor (const it of $input.all()) {\n  if (it.json.id) ids.push(String(it.json.id));\n  else errs.push([it.json.error?.message, it.json.error?.description].filter(Boolean).join(' — ') || JSON.stringify(it.json).slice(0, 300));\n}\nif (errs.length) return [{ json: { _ok: false, erreur: 'création du conteneur : ' + errs.join(' | ') } }];\nreturn [{ json: { _ok: true, ids, carrousel: String(req.type).toLowerCase() === 'carrousel' } }];\n"
+      },
+      "id": "2b9a8aec-ed19-50f6-8499-c1c0a11fe486",
+      "name": "Collecter conteneurs · IG story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4400,
+        1500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "6d3b3eef-97d8-413f-bd9f-e18e4eb49683",
+              "leftValue": "={{ $json._ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "46e5b020-5bc5-5942-9034-8b2da7172db3",
+      "name": "Conteneurs OK ? · IG story",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4620,
+        1500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "9e45f209-f477-402b-a635-ea8e945bad3f",
+              "leftValue": "={{ $json.carrousel }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7460b7a3-5906-5dfd-ab38-6d15043a8fac",
+      "name": "Carrousel ? · IG story",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4840,
+        1400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.ig_api }}/me/media",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ media_type: 'CAROUSEL', children: $json.ids.join(','), caption: String($('Entrée · IG story').first().json.texte || '') }) }}"
+      },
+      "id": "861bf5a1-a011-52b4-8bd3-853627a06e89",
+      "name": "Créer carrousel · IG story",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5060,
+        1300
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Conteneur à publier : le carrousel parent, ou le conteneur unique (post / story / reel).\nconst j = $json;\nif (j.ids) return [{ json: { _ok: true, creation_id: j.ids[0] } }];\nif (j.id) return [{ json: { _ok: true, creation_id: String(j.id) } }];\nreturn [{ json: { _ok: false, erreur: 'création du carrousel : ' + ([j.error?.message, j.error?.description].filter(Boolean).join(' — ') || JSON.stringify(j).slice(0, 300)) } }];\n"
+      },
+      "id": "ed751a6c-a0e7-5819-b904-1169e493fbd8",
+      "name": "Cible · IG story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5280,
+        1400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "fb8eacab-d446-48f7-b3dd-b7bca7c7ef17",
+              "leftValue": "={{ $json._ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6a7514a2-f0f0-5bcb-b8e0-37125100a38b",
+      "name": "Cible OK ? · IG story",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5500,
+        1400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.ig_api }}/{{ $('Cible · IG story').first().json.creation_id }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ fields: 'status_code,status' }) }}"
+      },
+      "id": "0555c5f1-8cc3-5d61-bde8-1a2aa171317a",
+      "name": "Statut conteneur · IG story",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5720,
+        1300
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// FINISHED → publier ; ERROR/EXPIRED → échec ; sinon on réessaie (garde : poll_max vérifications).\nconst cfg = $('Config').first().json;\nconst s = $json.status_code;\nif (s === 'FINISHED') return [{ json: { etat: 'pret' } }];\nif (s === 'ERROR' || s === 'EXPIRED') return [{ json: { etat: 'echec', erreur: `conteneur ${s} : ${$json.status || ''}` } }];\nif ($runIndex + 1 >= cfg.poll_max) return [{ json: { etat: 'echec', erreur: `conteneur toujours « ${s || $json.error?.message || '?'} » après ${$runIndex + 1} vérifications` } }];\nreturn [{ json: { etat: 'attente' } }];\n"
+      },
+      "id": "20bc4257-1048-59d6-a104-b18aa8c3494b",
+      "name": "Évaluer statut · IG story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5940,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "5b9d4da3-485c-4efa-9f60-b2d37235dcae",
+              "leftValue": "={{ $json.etat === 'pret' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d5e7fb5a-55f8-59ae-b353-69f1bf737809",
+      "name": "Prêt ? · IG story",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6160,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "4bd645f4-20bf-4938-873e-351c6c563460",
+              "leftValue": "={{ $json.etat === 'attente' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "e4ef125e-3d11-5602-b637-35f2658be46e",
+      "name": "En attente ? · IG story",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6380,
+        1400
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('Config').first().json.poll_attente_s }}",
+        "unit": "seconds"
+      },
+      "id": "1286552c-6c32-5b2c-8c83-5109fe6ea234",
+      "name": "Attendre · IG story",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        6600,
+        1500
+      ],
+      "webhookId": "67fee7c1-2cb5-53cc-97c0-22b850e7fbde"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.ig_api }}/me/media_publish",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ creation_id: $('Cible · IG story').first().json.creation_id }) }}"
+      },
+      "id": "6648097f-c6c3-5df7-ae07-064a5d609554",
+      "name": "Publier · IG story",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6380,
+        1200
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "8820d745-e042-4781-a074-b3edd4393e9a",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0bcabd54-6f0a-532d-a023-67a9554bfab3",
+      "name": "Publié ? · IG story",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6600,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.ig_api }}/{{ $json.id }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ fields: 'permalink,media_type' }) }}"
+      },
+      "id": "e5b864c0-4764-5bb7-9838-ac32ec2814fb",
+      "name": "Permalien · IG story",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6820,
+        1100
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Entrée · IG story').first().json;\nconst d = req.desc_ids || {};\nconst s = v => (v === undefined || v === null) ? '' : String(v);\nreturn [{ json: {\n  plateforme: 'instagram', type: s(req.type), statut: 'ok',\n  post_id: s($('Publier · IG story').first().json.id), permalink: s($json.permalink),\n  langue_description: s(req.langue_description), langue_apprise: s(req.langue_apprise),\n  texte_id: s(d.texte_id), cta_id: s(d.cta_id), hashtags_id: s(d.hashtags_id),\n  source: s(req.source), source_ref: s(req.source_ref), erreur: s('').slice(0, 900),\n  date_publication: new Date().toISOString(),\n} }];\n"
+      },
+      "id": "6f47e579-d56d-5bf7-b148-20c76f8a34fa",
+      "name": "Ligne journal (succès) · IG story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7040,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_journal"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "plateforme": "={{ $json.plateforme }}",
+            "type": "={{ $json.type }}",
+            "statut": "={{ $json.statut }}",
+            "post_id": "={{ $json.post_id }}",
+            "permalink": "={{ $json.permalink }}",
+            "langue_description": "={{ $json.langue_description }}",
+            "langue_apprise": "={{ $json.langue_apprise }}",
+            "texte_id": "={{ $json.texte_id }}",
+            "cta_id": "={{ $json.cta_id }}",
+            "hashtags_id": "={{ $json.hashtags_id }}",
+            "source": "={{ $json.source }}",
+            "source_ref": "={{ $json.source_ref }}",
+            "erreur": "={{ $json.erreur }}",
+            "date_publication": "={{ $json.date_publication }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "plateforme",
+              "displayName": "plateforme",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "statut",
+              "displayName": "statut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_id",
+              "displayName": "post_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "permalink",
+              "displayName": "permalink",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "langue_description",
+              "displayName": "langue_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "langue_apprise",
+              "displayName": "langue_apprise",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "texte_id",
+              "displayName": "texte_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cta_id",
+              "displayName": "cta_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hashtags_id",
+              "displayName": "hashtags_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_ref",
+              "displayName": "source_ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "erreur",
+              "displayName": "erreur",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_publication",
+              "displayName": "date_publication",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8a212567-d3eb-5ca3-8937-fbd1b8a05b32",
+      "name": "Journal succès · IG story",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        7260,
+        1100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const pub = $('Publier · IG story').first().json;\nreturn [{ json: { ok: true, plateforme: 'instagram', post_id: String(pub.id),\n                  permalink: String($('Permalien · IG story').first().json.permalink || '') } }];\n"
+      },
+      "id": "c6a9e584-3593-5e48-ac95-e8d7d1c674d5",
+      "name": "Retour succès · IG story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7480,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Toutes les branches d'erreur arrivent ici.\nconst j = $json;\nconst erreur = j.erreur || [j.error?.message, j.error?.description].filter(Boolean).join(' — ') || JSON.stringify(j).slice(0, 400);\nreturn [{ json: { erreur } }];\n"
+      },
+      "id": "e72ae373-e25a-58df-ade7-4af15d876430",
+      "name": "Échec · IG story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6600,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Entrée · IG story').first().json;\nconst d = req.desc_ids || {};\nconst s = v => (v === undefined || v === null) ? '' : String(v);\nreturn [{ json: {\n  plateforme: 'instagram', type: s(req.type), statut: 'echec',\n  post_id: s(''), permalink: s(''),\n  langue_description: s(req.langue_description), langue_apprise: s(req.langue_apprise),\n  texte_id: s(d.texte_id), cta_id: s(d.cta_id), hashtags_id: s(d.hashtags_id),\n  source: s(req.source), source_ref: s(req.source_ref), erreur: s($json.erreur).slice(0, 900),\n  date_publication: new Date().toISOString(),\n} }];\n"
+      },
+      "id": "e5a8621f-f44f-53ea-b8da-922de541c5f1",
+      "name": "Ligne journal (échec) · IG story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6820,
+        1800
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_journal"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "plateforme": "={{ $json.plateforme }}",
+            "type": "={{ $json.type }}",
+            "statut": "={{ $json.statut }}",
+            "post_id": "={{ $json.post_id }}",
+            "permalink": "={{ $json.permalink }}",
+            "langue_description": "={{ $json.langue_description }}",
+            "langue_apprise": "={{ $json.langue_apprise }}",
+            "texte_id": "={{ $json.texte_id }}",
+            "cta_id": "={{ $json.cta_id }}",
+            "hashtags_id": "={{ $json.hashtags_id }}",
+            "source": "={{ $json.source }}",
+            "source_ref": "={{ $json.source_ref }}",
+            "erreur": "={{ $json.erreur }}",
+            "date_publication": "={{ $json.date_publication }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "plateforme",
+              "displayName": "plateforme",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "statut",
+              "displayName": "statut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_id",
+              "displayName": "post_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "permalink",
+              "displayName": "permalink",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "langue_description",
+              "displayName": "langue_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "langue_apprise",
+              "displayName": "langue_apprise",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "texte_id",
+              "displayName": "texte_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cta_id",
+              "displayName": "cta_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hashtags_id",
+              "displayName": "hashtags_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_ref",
+              "displayName": "source_ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "erreur",
+              "displayName": "erreur",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_publication",
+              "displayName": "date_publication",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e34ed841-de79-53fc-bdcb-23dc7b777f21",
+      "name": "Journal échec · IG story",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        7040,
+        1800
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: false, plateforme: 'instagram', erreur: $('Échec · IG story').first().json.erreur } }];\n"
+      },
+      "id": "60e6441b-f6f0-5df8-90b1-e86ed771d8d9",
+      "name": "Retour échec · IG story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7260,
+        1800
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "58480741-5d81-57a6-8a9b-60284ed5391c",
+      "name": "Entrée · IG visuel final",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        5280,
+        1700
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format commun : { type: reel|carrousel|story|post, images[], video, texte, langue_description,\n//                   langue_apprise, source, source_ref, desc_ids }  →  un conteneur par média.\nconst cfg = $('Config').first().json;\nconst req = $('Entrée · IG visuel final').first().json;\nconst type = String(req.type || '').toLowerCase();\nconst images = (req.images || []).filter(Boolean);\nconst caption = String(req.texte || '');\nconst fail = m => [{ json: { _ok: false, erreur: m } }];\nlet items = [];\nif (type === 'carrousel') {\n  if (images.length < cfg.min_carrousel) return fail(`carrousel : ${images.length} image(s), minimum ${cfg.min_carrousel}`);\n  if (images.length > cfg.max_carrousel) return fail(`carrousel : ${images.length} images, maximum de l'API ${cfg.max_carrousel}`);\n  items = images.map(u => ({ image_url: u, is_carousel_item: true }));\n} else if (type === 'post') {\n  if (images.length !== 1) return fail('post : exactement 1 image attendue');\n  items = [{ image_url: images[0], caption }];\n} else if (type === 'story') {\n  if (req.video) items = [{ media_type: 'STORIES', video_url: req.video }];\n  else if (images.length === 1) items = [{ media_type: 'STORIES', image_url: images[0] }];\n  else return fail('story : 1 image ou 1 vidéo attendue');\n} else if (type === 'reel') {\n  if (!req.video) return fail('reel : vidéo manquante');\n  items = [{ media_type: 'REELS', video_url: req.video, caption }];\n} else return fail(`type inconnu : « ${type} »`);\nif (caption.length > 2200) return fail(`légende trop longue (${caption.length}/2200 caractères)`);\nconst nTags = (caption.match(/#[^\\s#]+/g) || []).length;\nif (nTags > 30) return fail(`${nTags} hashtags (Instagram : 30 max)`);\nreturn items.map(params => ({ json: { _ok: true, params } }));\n"
+      },
+      "id": "04053a7f-8d74-5b72-994e-ef35e729ad93",
+      "name": "Préparer conteneurs · IG visuel final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5720,
+        1700
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "3bcb9e5f-c3c9-440e-89fe-994717844896",
+              "leftValue": "={{ $json._ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d5453024-c058-5eb7-a06f-5149464ec3e4",
+      "name": "Entrée valide ? · IG visuel final",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5940,
+        1700
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.ig_api }}/me/media",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.params) }}"
+      },
+      "id": "35a4636c-0d52-5c1a-b615-54292df9007b",
+      "name": "Créer conteneur · IG visuel final",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6160,
+        1600
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Entrée · IG visuel final').first().json;\nconst ids = [], errs = [];\nfor (const it of $input.all()) {\n  if (it.json.id) ids.push(String(it.json.id));\n  else errs.push([it.json.error?.message, it.json.error?.description].filter(Boolean).join(' — ') || JSON.stringify(it.json).slice(0, 300));\n}\nif (errs.length) return [{ json: { _ok: false, erreur: 'création du conteneur : ' + errs.join(' | ') } }];\nreturn [{ json: { _ok: true, ids, carrousel: String(req.type).toLowerCase() === 'carrousel' } }];\n"
+      },
+      "id": "e65314f4-c8f5-55ce-92ae-8207fe141c2e",
+      "name": "Collecter conteneurs · IG visuel final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6380,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1e0d0c5c-c4f9-48d5-a06a-e57281690541",
+              "leftValue": "={{ $json._ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ee7838d1-e0d4-58d5-8148-c729286beb18",
+      "name": "Conteneurs OK ? · IG visuel final",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6600,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e6e6f427-2213-4b68-aaa5-be3b578aa619",
+              "leftValue": "={{ $json.carrousel }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d7cba0bf-4838-5efa-ac50-0ed958ac5777",
+      "name": "Carrousel ? · IG visuel final",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        6820,
+        1500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.ig_api }}/me/media",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ media_type: 'CAROUSEL', children: $json.ids.join(','), caption: String($('Entrée · IG visuel final').first().json.texte || '') }) }}"
+      },
+      "id": "f371fd66-0618-52ca-93ec-456664dcb6ab",
+      "name": "Créer carrousel · IG visuel final",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7040,
+        1400
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Conteneur à publier : le carrousel parent, ou le conteneur unique (post / story / reel).\nconst j = $json;\nif (j.ids) return [{ json: { _ok: true, creation_id: j.ids[0] } }];\nif (j.id) return [{ json: { _ok: true, creation_id: String(j.id) } }];\nreturn [{ json: { _ok: false, erreur: 'création du carrousel : ' + ([j.error?.message, j.error?.description].filter(Boolean).join(' — ') || JSON.stringify(j).slice(0, 300)) } }];\n"
+      },
+      "id": "b6634cc9-3248-5b67-8ecf-472684c8cab2",
+      "name": "Cible · IG visuel final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7260,
+        1500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "86b585cb-1668-4a9d-b02c-244e7e8f25b8",
+              "leftValue": "={{ $json._ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ce9e17bf-79ef-5f85-b7a0-40ee63ebef19",
+      "name": "Cible OK ? · IG visuel final",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        7480,
+        1500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.ig_api }}/{{ $('Cible · IG visuel final').first().json.creation_id }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ fields: 'status_code,status' }) }}"
+      },
+      "id": "c2b0b8f1-5ddc-5df5-b4be-cc8cccf812fe",
+      "name": "Statut conteneur · IG visuel final",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7700,
+        1400
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// FINISHED → publier ; ERROR/EXPIRED → échec ; sinon on réessaie (garde : poll_max vérifications).\nconst cfg = $('Config').first().json;\nconst s = $json.status_code;\nif (s === 'FINISHED') return [{ json: { etat: 'pret' } }];\nif (s === 'ERROR' || s === 'EXPIRED') return [{ json: { etat: 'echec', erreur: `conteneur ${s} : ${$json.status || ''}` } }];\nif ($runIndex + 1 >= cfg.poll_max) return [{ json: { etat: 'echec', erreur: `conteneur toujours « ${s || $json.error?.message || '?'} » après ${$runIndex + 1} vérifications` } }];\nreturn [{ json: { etat: 'attente' } }];\n"
+      },
+      "id": "f22b13ac-0708-54f1-bb55-657f4a3db593",
+      "name": "Évaluer statut · IG visuel final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7920,
+        1400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "bd52cc50-ecac-458a-9862-9e25216aa15d",
+              "leftValue": "={{ $json.etat === 'pret' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5a54d65c-122e-59c6-b5a3-8a24f31f028a",
+      "name": "Prêt ? · IG visuel final",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        8140,
+        1400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "0b44d472-607f-469e-bfdf-007d9f4af993",
+              "leftValue": "={{ $json.etat === 'attente' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c736f64f-3a35-58c6-9f83-151ccd924721",
+      "name": "En attente ? · IG visuel final",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        8360,
+        1500
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('Config').first().json.poll_attente_s }}",
+        "unit": "seconds"
+      },
+      "id": "6e376112-7138-5206-82af-b946e4c10a1d",
+      "name": "Attendre · IG visuel final",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        8580,
+        1600
+      ],
+      "webhookId": "3a10b449-7fae-5f37-adba-72a3b164a40d"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.ig_api }}/me/media_publish",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ creation_id: $('Cible · IG visuel final').first().json.creation_id }) }}"
+      },
+      "id": "fba8c52c-9b3b-56bf-8c6e-f9ddfd85ad7e",
+      "name": "Publier · IG visuel final",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8360,
+        1300
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "d5ca0beb-c244-4b94-be5c-cc6778a1c3d4",
+              "leftValue": "={{ !!$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1c43f57f-0787-5c08-9f5b-d5e8e71bf85c",
+      "name": "Publié ? · IG visuel final",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        8580,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.ig_api }}/{{ $json.id }}",
+        "options": {},
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "instagramApi",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify({ fields: 'permalink,media_type' }) }}"
+      },
+      "id": "d24151f2-a459-5a5e-a139-6ba11a2fd8e2",
+      "name": "Permalien · IG visuel final",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8800,
+        1200
+      ],
+      "credentials": {
+        "instagramApi": {
+          "id": "yWMtvSRb69T9GKW2",
+          "name": "Instagram account"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Entrée · IG visuel final').first().json;\nconst d = req.desc_ids || {};\nconst s = v => (v === undefined || v === null) ? '' : String(v);\nreturn [{ json: {\n  plateforme: 'instagram', type: s(req.type), statut: 'ok',\n  post_id: s($('Publier · IG visuel final').first().json.id), permalink: s($json.permalink),\n  langue_description: s(req.langue_description), langue_apprise: s(req.langue_apprise),\n  texte_id: s(d.texte_id), cta_id: s(d.cta_id), hashtags_id: s(d.hashtags_id),\n  source: s(req.source), source_ref: s(req.source_ref), erreur: s('').slice(0, 900),\n  date_publication: new Date().toISOString(),\n} }];\n"
+      },
+      "id": "771f1f9a-c878-5b25-8fea-f457bc0152b4",
+      "name": "Ligne journal (succès) · IG visuel final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9020,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_journal"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "plateforme": "={{ $json.plateforme }}",
+            "type": "={{ $json.type }}",
+            "statut": "={{ $json.statut }}",
+            "post_id": "={{ $json.post_id }}",
+            "permalink": "={{ $json.permalink }}",
+            "langue_description": "={{ $json.langue_description }}",
+            "langue_apprise": "={{ $json.langue_apprise }}",
+            "texte_id": "={{ $json.texte_id }}",
+            "cta_id": "={{ $json.cta_id }}",
+            "hashtags_id": "={{ $json.hashtags_id }}",
+            "source": "={{ $json.source }}",
+            "source_ref": "={{ $json.source_ref }}",
+            "erreur": "={{ $json.erreur }}",
+            "date_publication": "={{ $json.date_publication }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "plateforme",
+              "displayName": "plateforme",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "statut",
+              "displayName": "statut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_id",
+              "displayName": "post_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "permalink",
+              "displayName": "permalink",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "langue_description",
+              "displayName": "langue_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "langue_apprise",
+              "displayName": "langue_apprise",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "texte_id",
+              "displayName": "texte_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cta_id",
+              "displayName": "cta_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hashtags_id",
+              "displayName": "hashtags_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_ref",
+              "displayName": "source_ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "erreur",
+              "displayName": "erreur",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_publication",
+              "displayName": "date_publication",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cc72a719-a54f-5ec8-bd24-2c06ffc8f1f9",
+      "name": "Journal succès · IG visuel final",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        9240,
+        1200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const pub = $('Publier · IG visuel final').first().json;\nreturn [{ json: { ok: true, plateforme: 'instagram', post_id: String(pub.id),\n                  permalink: String($('Permalien · IG visuel final').first().json.permalink || '') } }];\n"
+      },
+      "id": "9b26d976-7c3c-5227-a22e-9f49422aa7f7",
+      "name": "Retour succès · IG visuel final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9460,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Toutes les branches d'erreur arrivent ici.\nconst j = $json;\nconst erreur = j.erreur || [j.error?.message, j.error?.description].filter(Boolean).join(' — ') || JSON.stringify(j).slice(0, 400);\nreturn [{ json: { erreur } }];\n"
+      },
+      "id": "6f0cb225-cc50-5fe1-b7bb-ae077d981b6e",
+      "name": "Échec · IG visuel final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8580,
+        1900
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const req = $('Entrée · IG visuel final').first().json;\nconst d = req.desc_ids || {};\nconst s = v => (v === undefined || v === null) ? '' : String(v);\nreturn [{ json: {\n  plateforme: 'instagram', type: s(req.type), statut: 'echec',\n  post_id: s(''), permalink: s(''),\n  langue_description: s(req.langue_description), langue_apprise: s(req.langue_apprise),\n  texte_id: s(d.texte_id), cta_id: s(d.cta_id), hashtags_id: s(d.hashtags_id),\n  source: s(req.source), source_ref: s(req.source_ref), erreur: s($json.erreur).slice(0, 900),\n  date_publication: new Date().toISOString(),\n} }];\n"
+      },
+      "id": "dcdec0d9-5590-5d7e-a8fa-da53a1a22e7e",
+      "name": "Ligne journal (échec) · IG visuel final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8800,
+        1900
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "row",
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vb_journal"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "plateforme": "={{ $json.plateforme }}",
+            "type": "={{ $json.type }}",
+            "statut": "={{ $json.statut }}",
+            "post_id": "={{ $json.post_id }}",
+            "permalink": "={{ $json.permalink }}",
+            "langue_description": "={{ $json.langue_description }}",
+            "langue_apprise": "={{ $json.langue_apprise }}",
+            "texte_id": "={{ $json.texte_id }}",
+            "cta_id": "={{ $json.cta_id }}",
+            "hashtags_id": "={{ $json.hashtags_id }}",
+            "source": "={{ $json.source }}",
+            "source_ref": "={{ $json.source_ref }}",
+            "erreur": "={{ $json.erreur }}",
+            "date_publication": "={{ $json.date_publication }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "plateforme",
+              "displayName": "plateforme",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "statut",
+              "displayName": "statut",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_id",
+              "displayName": "post_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "permalink",
+              "displayName": "permalink",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "langue_description",
+              "displayName": "langue_description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "langue_apprise",
+              "displayName": "langue_apprise",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "texte_id",
+              "displayName": "texte_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cta_id",
+              "displayName": "cta_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hashtags_id",
+              "displayName": "hashtags_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_ref",
+              "displayName": "source_ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "erreur",
+              "displayName": "erreur",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date_publication",
+              "displayName": "date_publication",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "09bf2806-b00d-516b-b070-df40d6ac989a",
+      "name": "Journal échec · IG visuel final",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        9020,
+        1900
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { ok: false, plateforme: 'instagram', erreur: $('Échec · IG visuel final').first().json.erreur } }];\n"
+      },
+      "id": "0bd08a21-4a3e-5672-b6bd-4dd2c4745249",
+      "name": "Retour échec · IG visuel final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9240,
+        1900
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "711741ee-dc34-5c6a-a2c8-1ba2f78cb6d4",
+      "name": "Entrée · FB story",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        0,
+        2220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "253d6f3a-22b1-4f42-93c0-1472ac886b36",
+              "leftValue": "={{ !!$json.video }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fd91cf88-1e95-57fe-b01d-356894e9d269",
+      "name": "Vidéo ? · FB story",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        220,
+        2220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/1361049150428275/video_stories",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "upload_phase",
+              "value": "start"
+            }
+          ]
+        }
+      },
+      "id": "0d4c59cd-5232-5960-9377-f95188a2e4c6",
+      "name": "Démarrer vidéo · FB story",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        2100
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ $('Fichier du reel').first().json.chemin }}",
+        "options": {}
+      },
+      "id": "89d6ea5a-5b76-5b36-81fc-d85aad44c740",
+      "name": "Lire vidéo · FB story",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1,
+      "position": [
+        660,
+        2100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Taille exacte du fichier : requise par rupload.facebook.com (en-tête file_size).\nconst buf = await this.helpers.getBinaryDataBuffer(0, 'data');\nreturn [{ json: { file_size: buf.length }, binary: $input.first().binary }];\n"
+      },
+      "id": "3c1eaf4a-c651-5aec-8a02-837658466fcb",
+      "name": "Taille vidéo · FB story",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        2100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Démarrer vidéo · FB story').first().json.upload_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "offset",
+              "value": "0"
+            },
+            {
+              "name": "file_size",
+              "value": "={{ $json.file_size }}"
+            }
+          ]
+        }
+      },
+      "id": "393f9892-200c-56d4-be6a-e45662818013",
+      "name": "Envoyer vidéo · FB story",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        2100
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/1361049150428275/video_stories",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "upload_phase",
+              "value": "finish"
+            },
+            {
+              "name": "video_id",
+              "value": "={{ $('Démarrer vidéo · FB story').first().json.video_id }}"
+            }
+          ]
+        }
+      },
+      "id": "a1ff43e8-7791-5674-9392-223726b7feb9",
+      "name": "Publier vidéo · FB story",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        2100
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/1361049150428275/photos",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ ($json.images || [])[0] }}"
+            },
+            {
+              "name": "published",
+              "value": "false"
+            }
+          ]
+        }
+      },
+      "id": "55d60917-a6f8-582c-8e91-132733637331",
+      "name": "Photo non publiée · FB story",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        2340
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/1361049150428275/photo_stories",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "photo_id",
+              "value": "={{ $json.id }}"
+            }
+          ]
+        }
+      },
+      "id": "ff7118f6-c6cb-594d-b3d4-7cc336569970",
+      "name": "Publier photo · FB story",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        2340
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Chaque heure": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Créneau",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créneau": {
+      "main": [
+        [
+          {
+            "node": "Déjà publiée ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Déjà publiée ?": {
+      "main": [
+        [
+          {
+            "node": "Aiguiller",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aiguiller": {
+      "main": [
+        [
+          {
+            "node": "Question ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Question ?": {
+      "main": [
+        [
+          {
+            "node": "Mots du reel",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Réponse ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mots du reel": {
+      "main": [
+        [
+          {
+            "node": "Choisir dans le reel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Choisir dans le reel": {
+      "main": [
+        [
+          {
+            "node": "Mot du reel ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mot du reel ?": {
+      "main": [
+        [
+          {
+            "node": "Données question",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mots récents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Réponse ?": {
+      "main": [
+        [
+          {
+            "node": "Question du jour",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reel ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reel ?": {
+      "main": [
+        [
+          {
+            "node": "Reel du jour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mots récents": {
+      "main": [
+        [
+          {
+            "node": "Requête mot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requête mot": {
+      "main": [
+        [
+          {
+            "node": "Tirer un mot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tirer un mot": {
+      "main": [
+        [
+          {
+            "node": "Mot au hasard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mot au hasard": {
+      "main": [
+        [
+          {
+            "node": "Données question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Données question": {
+      "main": [
+        [
+          {
+            "node": "Rendre question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rendre question": {
+      "main": [
+        [
+          {
+            "node": "Story question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Story question": {
+      "main": [
+        [
+          {
+            "node": "Entrée · IG story",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Entrée · FB story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Question du jour": {
+      "main": [
+        [
+          {
+            "node": "Données réponse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Données réponse": {
+      "main": [
+        [
+          {
+            "node": "Rendre réponse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rendre réponse": {
+      "main": [
+        [
+          {
+            "node": "Story réponse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Story réponse": {
+      "main": [
+        [
+          {
+            "node": "Entrée · IG story",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Entrée · FB story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reel du jour": {
+      "main": [
+        [
+          {
+            "node": "Fichier du reel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fichier du reel": {
+      "main": [
+        [
+          {
+            "node": "Reel trouvé ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reel trouvé ?": {
+      "main": [
+        [
+          {
+            "node": "Lire vidéo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire vidéo": {
+      "main": [
+        [
+          {
+            "node": "Héberger vidéo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Héberger vidéo": {
+      "main": [
+        [
+          {
+            "node": "Story reel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Story reel": {
+      "main": [
+        [
+          {
+            "node": "Entrée · IG story",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Entrée · FB story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publier story": {
+      "main": [
+        [
+          {
+            "node": "Story publiée ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Story publiée ?": {
+      "main": [
+        [
+          {
+            "node": "Après question ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Après question ?": {
+      "main": [
+        [
+          {
+            "node": "Lignes à mémoriser",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Après réponse ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lignes à mémoriser": {
+      "main": [
+        [
+          {
+            "node": "Mémoriser mot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Après réponse ?": {
+      "main": [
+        [
+          {
+            "node": "Marquer répondu",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marquer répondu": {
+      "main": [
+        [
+          {
+            "node": "Derniers mots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Derniers mots": {
+      "main": [
+        [
+          {
+            "node": "Données visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Données visuel final": {
+      "main": [
+        [
+          {
+            "node": "Rendre visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rendre visuel final": {
+      "main": [
+        [
+          {
+            "node": "Story visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Story visuel final": {
+      "main": [
+        [
+          {
+            "node": "Entrée · IG visuel final",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Entrée · FB story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrée · IG story": {
+      "main": [
+        [
+          {
+            "node": "Préparer conteneurs · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer conteneurs · IG story": {
+      "main": [
+        [
+          {
+            "node": "Entrée valide ? · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrée valide ? · IG story": {
+      "main": [
+        [
+          {
+            "node": "Créer conteneur · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer conteneur · IG story": {
+      "main": [
+        [
+          {
+            "node": "Collecter conteneurs · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collecter conteneurs · IG story": {
+      "main": [
+        [
+          {
+            "node": "Conteneurs OK ? · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conteneurs OK ? · IG story": {
+      "main": [
+        [
+          {
+            "node": "Carrousel ? · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carrousel ? · IG story": {
+      "main": [
+        [
+          {
+            "node": "Créer carrousel · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cible · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer carrousel · IG story": {
+      "main": [
+        [
+          {
+            "node": "Cible · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cible · IG story": {
+      "main": [
+        [
+          {
+            "node": "Cible OK ? · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cible OK ? · IG story": {
+      "main": [
+        [
+          {
+            "node": "Statut conteneur · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Statut conteneur · IG story": {
+      "main": [
+        [
+          {
+            "node": "Évaluer statut · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Évaluer statut · IG story": {
+      "main": [
+        [
+          {
+            "node": "Prêt ? · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prêt ? · IG story": {
+      "main": [
+        [
+          {
+            "node": "Publier · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "En attente ? · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "En attente ? · IG story": {
+      "main": [
+        [
+          {
+            "node": "Attendre · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attendre · IG story": {
+      "main": [
+        [
+          {
+            "node": "Statut conteneur · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publier · IG story": {
+      "main": [
+        [
+          {
+            "node": "Publié ? · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publié ? · IG story": {
+      "main": [
+        [
+          {
+            "node": "Permalien · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Permalien · IG story": {
+      "main": [
+        [
+          {
+            "node": "Ligne journal (succès) · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ligne journal (succès) · IG story": {
+      "main": [
+        [
+          {
+            "node": "Journal succès · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Journal succès · IG story": {
+      "main": [
+        [
+          {
+            "node": "Retour succès · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Échec · IG story": {
+      "main": [
+        [
+          {
+            "node": "Ligne journal (échec) · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ligne journal (échec) · IG story": {
+      "main": [
+        [
+          {
+            "node": "Journal échec · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Journal échec · IG story": {
+      "main": [
+        [
+          {
+            "node": "Retour échec · IG story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retour succès · IG story": {
+      "main": [
+        [
+          {
+            "node": "Publier story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retour échec · IG story": {
+      "main": [
+        [
+          {
+            "node": "Publier story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrée · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Préparer conteneurs · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Préparer conteneurs · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Entrée valide ? · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrée valide ? · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Créer conteneur · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer conteneur · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Collecter conteneurs · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collecter conteneurs · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Conteneurs OK ? · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conteneurs OK ? · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Carrousel ? · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carrousel ? · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Créer carrousel · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cible · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Créer carrousel · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Cible · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cible · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Cible OK ? · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cible OK ? · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Statut conteneur · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Statut conteneur · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Évaluer statut · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Évaluer statut · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Prêt ? · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prêt ? · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Publier · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "En attente ? · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "En attente ? · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Attendre · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Attendre · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Statut conteneur · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publier · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Publié ? · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publié ? · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Permalien · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Échec · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Permalien · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Ligne journal (succès) · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ligne journal (succès) · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Journal succès · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Journal succès · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Retour succès · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Échec · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Ligne journal (échec) · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ligne journal (échec) · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Journal échec · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Journal échec · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Retour échec · IG visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retour succès · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Publier visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retour échec · IG visuel final": {
+      "main": [
+        [
+          {
+            "node": "Publier visuel final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrée · FB story": {
+      "main": [
+        [
+          {
+            "node": "Vidéo ? · FB story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vidéo ? · FB story": {
+      "main": [
+        [
+          {
+            "node": "Démarrer vidéo · FB story",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Photo non publiée · FB story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Démarrer vidéo · FB story": {
+      "main": [
+        [
+          {
+            "node": "Lire vidéo · FB story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire vidéo · FB story": {
+      "main": [
+        [
+          {
+            "node": "Taille vidéo · FB story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Taille vidéo · FB story": {
+      "main": [
+        [
+          {
+            "node": "Envoyer vidéo · FB story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer vidéo · FB story": {
+      "main": [
+        [
+          {
+            "node": "Publier vidéo · FB story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Photo non publiée · FB story": {
+      "main": [
+        [
+          {
+            "node": "Publier photo · FB story",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "VbErreursAlerte1"
+  },
+  "pinData": {},
+  "tags": []
+}

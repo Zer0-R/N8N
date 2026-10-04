@@ -1,0 +1,825 @@
+{
+  "id": "VbSocialBlog0001",
+  "name": "VocaBag Social - Blog",
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 21 * * *"
+            }
+          ]
+        }
+      },
+      "id": "2a0f5c15-a0e4-5851-8960-00834db10fe7",
+      "name": "Chaque soir",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.media_service }}/blog/rediger",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ webhook: $('Config').first().json.blog.webhook_pret, max: $('Config').first().json.blog.max_par_soir, modele: $('Config').first().json.blog.modele }) }}"
+      },
+      "id": "2537509e-0e94-5800-9cb2-36b082293805",
+      "name": "Lancer la rédaction",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L2zYP3cEvAgZVffN",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vb-blog-pret",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "2d7104f3-7abc-5b14-819f-451e70a8d859",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L2zYP3cEvAgZVffN",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "webhookId": "d6a95b2b-15c1-568b-bf61-a0261420956c"
+    },
+    {
+      "parameters": {
+        "jsCode": "const b = $('Webhook').first().json.body || {};\nif (!/^c\\d{8}-[0-9a-f]{6}$/.test(b.id || '')) return [];\nreturn [{ json: b }];\n"
+      },
+      "id": "ff44f0b9-627f-5337-a2da-9f4d3f00ac04",
+      "name": "Brouillon",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "4852c22e-8f70-439a-bd8f-f528c0e925f8",
+              "leftValue": "={{ $json.ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8afe479b-6b2f-57ee-8f05-577db6ef6139",
+      "name": "Rédigé ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst cfg = $('Config').first().json;\nconst b = $json;\nconst av = (b.avertissements || []).length\n  ? `<div style=\"background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:10px 14px;margin:12px 0\">⚠️ ${b.avertissements.map(e).join('<br>⚠️ ')}</div>` : '';\nconst html = `<div style=\"font-family:Inter,Arial,sans-serif;max-width:680px;margin:auto;color:#0f172a;line-height:1.7\">\n<p style=\"color:#64748b;font-size:13px\">Brouillon rédigé à partir du ${b.permalink ? `<a href=\"${e(b.permalink)}\">carrousel Instagram</a>` : 'carrousel Instagram'}.\nPour le publier : bouton ✅ <b>Publier</b> sur Telegram (@vocabagbot). Il sera commité sur la branche staging\net arrivera sur vocabag.com au prochain déploiement.</p>\n<p style=\"font-size:13px\"><b>Catégorie :</b> ${e(b.categorie)} · <b>Adresse :</b> /blog/${e(b.slug)} · ${b.mots} mots<br>\n<b>Description Google :</b> ${e(b.description)}</p>${av}\n<hr style=\"border:none;border-top:1px solid #e2e8f0\"><h1 style=\"font-size:26px;line-height:1.3\">${e(b.titre)}</h1>\n${b.html}</div>`;\nreturn [{ json: { ...b, email_html: html, email_sujet: `📝 Brouillon blog : ${b.titre}` } }];\n"
+      },
+      "id": "34c29074-127a-53f6-b21c-94a9e0e9dfcc",
+      "name": "Composer e-mail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $('Config').first().json.blog.email_expediteur }}",
+        "toEmail": "={{ $('Config').first().json.blog.email }}",
+        "subject": "={{ $json.email_sujet }}",
+        "emailFormat": "html",
+        "html": "={{ $json.email_html }}",
+        "options": {}
+      },
+      "id": "0b3febbc-df15-5b2a-b900-9f6360932409",
+      "name": "E-mail brouillon",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1100,
+        400
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "hpwCz9fEiw7An0hB",
+          "name": "Gmail - contact.vocabag (SMTP)"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Le brouillon complet part aussi en fichier sur Telegram (lisible sans ouvrir l'e-mail).\nconst b = $('Composer e-mail').first().json;\nconst r = $json;\nreturn [{ json: { ...b, email_erreur: r.error ? (r.error.message || String(r.error)) : '' },\n          binary: { data: { data: Buffer.from(b.markdown, 'utf8').toString('base64'),\n                            mimeType: 'text/markdown', fileName: `${b.slug}.md`, fileExtension: 'md' } } }];\n"
+      },
+      "id": "a7eebf46-5144-59fe-a561-9cc96eeb27fa",
+      "name": "Fichier .md",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendDocument",
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "binaryData": true,
+        "binaryPropertyName": "data",
+        "additionalFields": {
+          "caption": "=📝 {{ $json.titre }}"
+        }
+      },
+      "id": "11b663bc-064c-58bc-ba62-d0bb9b6dddd0",
+      "name": "Envoyer le fichier",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1540,
+        400
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst cfg = $('Config').first().json;\nconst b = $('Fichier .md').first().json;\nconst av = (b.avertissements || []).length ? '\\n\\n⚠️ ' + b.avertissements.map(e).join('\\n⚠️ ') : '';\nconst mail = b.email_erreur ? `⚠️ E-mail non envoyé : ${e(b.email_erreur)}` : `📧 Brouillon complet envoyé à ${e(cfg.blog.email)}`;\nreturn [{ json: { id: b.id, texte:\n  `📝 <b>Nouveau brouillon de blog</b>\\n\\n<b>${e(b.titre)}</b>\\n${e(b.description)}\\n\\n` +\n  `${e(b.categorie)} · ${b.mots} mots · /blog/${e(b.slug)}${av}\\n\\n${mail}\\n\\n` +\n  `✅ Publier = commit sur la branche staging ; en ligne sur vocabag.com au prochain déploiement.` } }];\n"
+      },
+      "id": "a9c39c89-6aa5-5ad9-b24c-06c61526c3b9",
+      "name": "Texte à valider",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ $json.texte }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "✅ Publier",
+                    "additionalFields": {
+                      "callback_data": "=blog:pub:{{ $json.id }}"
+                    }
+                  },
+                  {
+                    "text": "🔁 Réécrire",
+                    "additionalFields": {
+                      "callback_data": "=blog:redo:{{ $json.id }}"
+                    }
+                  },
+                  {
+                    "text": "❌ Rejeter",
+                    "additionalFields": {
+                      "callback_data": "=blog:rej:{{ $json.id }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "3bc6a9a8-ef71-5359-a027-362c2369f409",
+      "name": "Demander validation",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1980,
+        400
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst b = $json;\nconst suite = b.definitif ? 'Abandonné après plusieurs essais.' : 'Nouvel essai au prochain passage (21h).';\nreturn [{ json: { id: b.id, texte: `❌ <b>Rédaction du blog échouée</b> (${e(b.id)})\\n${e(b.erreur)}\\n\\n${suite}` +\n  (b.permalink ? `\\nCarrousel : ${e(b.permalink)}` : '') } }];\n"
+      },
+      "id": "2f90f74e-d7cf-5bbf-8863-67c6b5e59a90",
+      "name": "Message échec",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        650
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ $json.texte }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🔁 Réessayer maintenant",
+                    "additionalFields": {
+                      "callback_data": "=blog:redo:{{ $json.id }}"
+                    }
+                  },
+                  {
+                    "text": "❌ Abandonner",
+                    "additionalFields": {
+                      "callback_data": "=blog:rej:{{ $json.id }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "88f0b819-7a74-5cc2-8af4-baf3d9aba859",
+      "name": "Signaler échec",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1100,
+        650
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {},
+      "id": "7a7d209c-4ff1-51c4-813a-3557638df5ce",
+      "name": "Entrée",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.media_service }}/blog/{{ ({ pub: 'publier', rej: 'rejeter', redo: 'reecrire' })[$('Entrée').first().json.decision] }}",
+        "options": {},
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ id: $('Entrée').first().json.id }) }}"
+      },
+      "id": "aee008f8-8ca9-5162-a5da-254dbb458b98",
+      "name": "Appeler le service",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        1200
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L2zYP3cEvAgZVffN",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst d = $('Entrée').first().json;\nconst r = $json;\nlet texte, court;\nif (!r.ok) {\n  const err = r.error?.message || r.error || JSON.stringify(r).slice(0, 300);\n  return [{ json: { ...d, ok: false, court: 'Échec', texte: `❌ Action « ${d.decision} » impossible sur ${e(d.id)} :\\n${e(err)}` } }];\n}\nif (d.decision === 'pub') {\n  court = 'Publié sur staging';\n  texte = r.deja ? `✅ Déjà publié : ${e(r.url_staging)}`\n    : `✅ <b>Publié sur staging</b> — ${e(r.titre)}\\n${e(r.url_staging)}\\n\\nCommit ${e(r.commit)} sur la branche staging (non poussé).\\n` +\n      `En ligne sur vocabag.com au prochain déploiement :\\n${e(r.url_prod)}`;\n} else if (d.decision === 'rej') {\n  court = 'Rejeté';\n  texte = `❌ Brouillon rejeté${r.titre ? ' — ' + e(r.titre) : ''}`;\n} else {\n  court = 'Réécriture lancée';\n  texte = r.lance ? '🔁 Réécriture lancée : nouveau brouillon dans quelques minutes.'\n                  : '🔁 Réécriture programmée (une rédaction est déjà en cours, ou au prochain passage de 21h).';\n}\nreturn [{ json: { ...d, ok: true, court, texte } }];\n"
+      },
+      "id": "9b12bd2f-2b5c-598d-bd25-b82bd6f118e8",
+      "name": "Réponse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "callback",
+        "operation": "answerQuery",
+        "queryId": "={{ $json.callback_query_id }}",
+        "additionalFields": {
+          "text": "={{ $json.court }}"
+        }
+      },
+      "id": "e4408619-4c67-50c1-abdc-2ec5ce9f7411",
+      "name": "Accuser réception",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        1200
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "7b27186f-aa2f-46c3-a52b-3c3b76280c0b",
+              "leftValue": "={{ $('Réponse').first().json.ok === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "148104c1-db81-5657-9c10-27fa97b2f1d6",
+      "name": "Réussi ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "messageType": "message",
+        "chatId": "={{ $('Réponse').first().json.chat_id }}",
+        "messageId": "={{ $('Réponse').first().json.message_id }}",
+        "text": "={{ $('Réponse').first().json.texte }}",
+        "replyMarkup": "none",
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "e590da82-1398-5c75-bc3b-debbeca9095d",
+      "name": "Remplacer le message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        1100
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Config').first().json.telegram_chat_id }}",
+        "text": "={{ $('Réponse').first().json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "61420251-4c14-58a3-b481-94308c5b374a",
+      "name": "Signaler",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1320,
+        1300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// CONFIGURATION de ce workflow — modifier ici. Les secrets restent dans les credentials n8n.\nreturn [{ json: {\n  // --- Telegram : seul ce chat peut piloter le bot et reçoit les messages\n  telegram_chat_id: '6980427615',\n\n  // --- Service média local (conversion, rendu HTML→image, hébergement public, blog)\n  media_service: 'http://host.docker.internal:8791',\n\n  // --- Blog : un article par carrousel publié, rédigé chaque soir par Claude Code (abonnement, sans API)\n  //     puis validé sur Telegram. L'heure de la revue est dans le déclencheur « Chaque soir ».\n  blog: {\n    email: 'contact.secbec@gmail.com',   // reçoit le brouillon complet\n    email_expediteur: 'VocaBag Blog <contact.vocabag@gmail.com>',\n    max_par_soir: 5,\n    modele: '',                   // '' = modèle par défaut de Claude Code ; ex. 'sonnet' pour économiser le quota\n    webhook_pret: 'http://localhost:5678/webhook/vb-blog-pret',   // appelé par le rédacteur (hôte)\n  },\n} }];\n"
+      },
+      "id": "d30387fb-37b7-57af-b4e6-8dfa3fe89738",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        150,
+        750
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "a923d613-58de-4486-a795-32504cad1156",
+              "leftValue": "={{ $('Chaque soir').isExecuted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "0cb14177-52c2-58c6-953c-c00a35bba2c2",
+      "name": "Revue du soir ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        300,
+        250
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "065965de-11b3-43e7-8770-870ae1dae2c8",
+              "leftValue": "={{ $('Webhook').isExecuted }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "02fee3ca-3086-5079-aa3e-9177e0b89c79",
+      "name": "Brouillon reçu ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        300,
+        900
+      ]
+    }
+  ],
+  "connections": {
+    "Brouillon": {
+      "main": [
+        [
+          {
+            "node": "Rédigé ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rédigé ?": {
+      "main": [
+        [
+          {
+            "node": "Composer e-mail",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Message échec",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Composer e-mail": {
+      "main": [
+        [
+          {
+            "node": "E-mail brouillon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "E-mail brouillon": {
+      "main": [
+        [
+          {
+            "node": "Fichier .md",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fichier .md": {
+      "main": [
+        [
+          {
+            "node": "Envoyer le fichier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envoyer le fichier": {
+      "main": [
+        [
+          {
+            "node": "Texte à valider",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Texte à valider": {
+      "main": [
+        [
+          {
+            "node": "Demander validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message échec": {
+      "main": [
+        [
+          {
+            "node": "Signaler échec",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Appeler le service": {
+      "main": [
+        [
+          {
+            "node": "Réponse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Réponse": {
+      "main": [
+        [
+          {
+            "node": "Accuser réception",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accuser réception": {
+      "main": [
+        [
+          {
+            "node": "Réussi ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Réussi ?": {
+      "main": [
+        [
+          {
+            "node": "Remplacer le message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Signaler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chaque soir": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entrée": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Revue du soir ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revue du soir ?": {
+      "main": [
+        [
+          {
+            "node": "Lancer la rédaction",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Brouillon reçu ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Brouillon reçu ?": {
+      "main": [
+        [
+          {
+            "node": "Brouillon",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Appeler le service",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "tags": []
+}
