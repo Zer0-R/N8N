@@ -22,18 +22,19 @@ let fiche = lire('R · Fiche');
 fiche = fiche.data ?? fiche;
 if (Array.isArray(fiche)) fiche = fiche[0] || {};
 const media = lire('R · Héberger');
-// Anti-doublon : publication du jour encore en cours (< 1 h), ou plateforme publiée d'après la fiche il y a moins d'1 h
-// (le temps qu'elle apparaisse dans l'API). Au-delà, un ID sans Reel visible = Reel réellement manquant → on republie.
+// Anti-doublon : publication du jour encore en cours (< 1 h), ou plateforme dont l'ID de la fiche existe toujours
+// (lu directement : GET /{id}). On ne republie que si l'objet est introuvable ou en erreur.
 const minutes = t => t ? (Date.now() - Date.parse(t)) / 60000 : Infinity;
 const ageMin = minutes(fiche.ecrit_a);
-const ageFin = minutes(fiche.rattrape_a || fiche.termine_a);
-const recent = ageFin < 60;
-const instagram = ev.rat.instagram >= 0 && !(fiche.instagram_id && recent);
-const facebook = ev.rat.facebook >= 0 && !(fiche.facebook_id && recent);
+const objIG = lire('R · IG objet'), objFB = lire('R · FB objet');
+const enLigneIG = !!(fiche.instagram_id && objIG.id && !objIG.error);
+const enLigneFB = !!(fiche.facebook_id && objFB.id && !objFB.error && objFB.status?.video_status !== 'error');
+const instagram = ev.rat.instagram >= 0 && !enLigneIG;
+const facebook = ev.rat.facebook >= 0 && !enLigneFB;
 let raison = '';
 if (!fiche || !fiche.video_path) raison = 'fiche du jour introuvable (_publications/' + $now.setZone('Europe/Paris').toISODate() + '.json)';
 else if (fiche.statut === 'en_cours' && ageMin < 60) raison = `publication du jour encore en cours (lancée il y a ${Math.round(ageMin)} min) — pas de rattrapage pour éviter un doublon`;
-else if (!instagram && !facebook) raison = `publié il y a ${Math.round(ageFin)} min d'après la fiche (Instagram ${fiche.instagram_id || '—'}, Facebook ${fiche.facebook_id || '—'}) : pas encore visible dans l'API ?`;
+else if (!instagram && !facebook) raison = `déjà en ligne d'après l'API (Instagram ${fiche.instagram_id || '—'}, Facebook ${fiche.facebook_id || '—'}), non retrouvé par la recherche du jour`;
 else if (!media.url) raison = 'vidéo non hébergée : ' + String(media.error || media.message || 'fichier ' + fiche.video_path + ' illisible').slice(0, 200);
 return [{ json: {
   publier: !raison, raison,
@@ -70,7 +71,7 @@ const maj = (idx, nom, cle) => {
   if (idx < 0) return;
   const idFiche = fiche[cle + '_id'];
   if (idFiche && prep[cle] === false && !/encore en cours/.test(prep.raison || ''))
-    pb[idx] = `ℹ️ ${nom} : publié il y a moins d'1 h d'après la fiche du jour (${e(idFiche)}), pas encore visible dans l'API — pas de republication`;
+    pb[idx] = `ℹ️ ${nom} : publié (${e(idFiche)}) et toujours en ligne d'après l'API, mais non retrouvé par la recherche du jour — pas de republication`;
   else if (res[cle + '_id']) pb[idx] = `🔁 ${nom} : Reel manquant, republié automatiquement (${e(res[cle + '_id'])})`;
   else pb[idx] += ` — rattrapage échoué : ${e(prep.raison || res[cle + '_erreur'] || res.error?.message || 'erreur inconnue')}`;
 };
@@ -84,7 +85,7 @@ return [{ json: { envoyer: true, problemes: vrais.length, texte: texte.slice(0, 
 """
 
 
-def ajouter(nodes, link, ns, node_fn, http_fn, sous_wf, dossier, cred_db, sql_js, x0, y0=350):
+def ajouter(nodes, link, ns, node_fn, http_fn, sous_wf, dossier, cred_db, sql_js, x0, y0=350, cred_fb=None):
     """Ajoute la branche de rattrapage entre « Évaluer » et « Envoyer ? »."""
     def nd(name, type_, version, params, pos, **extra):
         d = node_fn(name, type_, version, params, pos, **extra)
@@ -100,6 +101,13 @@ def ajouter(nodes, link, ns, node_fn, http_fn, sous_wf, dossier, cred_db, sql_js
                            'combinator': 'and'}, 'options': {}}, pos)
 
     cont = {'onError': 'continueRegularOutput', 'alwaysOutputData': True}
+
+    def http_id(name, pos, champ, fields):
+        # lecture directe de l'objet publié dont l'ID est dans la fiche ('aucun' → erreur → considéré absent)
+        d = http_fn(name, pos, "={{ $('Config').first().json.graph }}/{{ ($('R · Fiche').first().json.data ?? "
+                    f"$('R · Fiche').first().json).{champ} || 'aucun' }}}}", cred_fb, {'fields': fields})
+        d['id'] = str(uuid.uuid5(uuid.NAMESPACE_URL, ns + 'rattrapage/' + name))
+        return d
     x, y = x0, y0
     nodes += [
         iff('Rattraper ?', '$json.rat.instagram >= 0 || $json.rat.facebook >= 0', [x, 100]),
@@ -107,8 +115,10 @@ def ajouter(nodes, link, ns, node_fn, http_fn, sous_wf, dossier, cred_db, sql_js
            {'fileSelector': f"={dossier}/{{{{ $now.setZone('Europe/Paris').toISODate() }}}}.json",
             'options': {'dataPropertyName': 'data'}}, [x + 220, y], **cont),
         nd('R · Fiche', 'n8n-nodes-base.extractFromFile', 1.1, {'operation': 'fromJson', 'options': {}}, [x + 440, y], **cont),
+        http_id('R · IG objet', [x + 440, y + 200], 'instagram_id', 'id,media_product_type,permalink'),
+        http_id('R · FB objet', [x + 660, y + 200], 'facebook_id', 'id,permalink_url,status'),
         nd('R · Lire vidéo', 'n8n-nodes-base.readWriteFile', 1.1,
-           {'fileSelector': "={{ ($json.data ?? $json).video_path || '/introuvable.mp4' }}",
+           {'fileSelector': "={{ ($('R · Fiche').first().json.data ?? $('R · Fiche').first().json).video_path || '/introuvable.mp4' }}",
             'options': {'dataPropertyName': 'data'}}, [x + 660, y], **cont),
         nd('R · Héberger', 'n8n-nodes-base.httpRequest', 4.2,
            {'method': 'POST', 'url': f'{MEDIA_URL}/stage', 'authentication': 'genericCredentialType',
@@ -139,7 +149,8 @@ def ajouter(nodes, link, ns, node_fn, http_fn, sous_wf, dossier, cred_db, sql_js
     ]
     for a, b, o in [
         ('Rattraper ?', 'R · Lire fiche', 0), ('Rattraper ?', 'Envoyer ?', 1),
-        ('R · Lire fiche', 'R · Fiche', 0), ('R · Fiche', 'R · Lire vidéo', 0), ('R · Lire vidéo', 'R · Héberger', 0),
+        ('R · Lire fiche', 'R · Fiche', 0), ('R · Fiche', 'R · IG objet', 0), ('R · IG objet', 'R · FB objet', 0),
+        ('R · FB objet', 'R · Lire vidéo', 0), ('R · Lire vidéo', 'R · Héberger', 0),
         ('R · Héberger', 'R · Préparer', 0), ('R · Préparer', 'R · Publier ?', 0),
         ('R · Publier ?', 'R · Publier', 0), ('R · Publier ?', 'R · Bilan', 1),
         ('R · Publier', 'R · Fiche à jour', 0), ('R · Fiche à jour', 'R · Fiche en fichier', 0),

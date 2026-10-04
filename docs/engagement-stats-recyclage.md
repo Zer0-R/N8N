@@ -48,6 +48,7 @@ Régénération : business.facebook.com/settings/system-users → n8n → Géné
   « Bravo » ≥ 85 % de la phrase complète et des mots significatifs, « Presque » ≥ 50 % avec 2 mots communs dont 1 significatif ;
   chinois / japonais : un mot seul n'est validé que si le commentaire est exactement ce mot (« 我不好意思 » ne valide plus « 好 »).
   Tests : `node social/setup/test_vocabag_correcteur.js` (30 cas, dont les exemples des revues ; phrases intégrées, sans dépendance à channels/).
-- **Rattrapage** : plateforme publiée d'après la fiche **il y a moins d'1 h** (`termine_a` / `rattrape_a`) → ligne ℹ️, pas de
-  republication ; au-delà, un ID sans Reel visible = Reel réellement manquant → 🚨 et republication (3e revue) ;
+- **Rattrapage** : si la fiche contient un ID, l'objet est lu directement (`R · IG objet` / `R · FB objet`, `GET /{id}`) :
+  toujours en ligne → ligne ℹ️, pas de republication ; introuvable ou vidéo en erreur → 🚨 et republication (4e revue,
+  remplace le délai d'1 h de la 3e revue) ;
   après un rattrapage, la fiche du jour est réécrite avec les nouveaux ID (`R · Fiche à jour`) → pas de doublon le soir.

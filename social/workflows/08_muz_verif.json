@@ -480,7 +480,89 @@
     },
     {
       "parameters": {
-        "fileSelector": "={{ ($json.data ?? $json).video_path || '/introuvable.mp4' }}",
+        "method": "GET",
+        "url": "={{ $('Config').first().json.graph }}/{{ ($('R · Fiche').first().json.data ?? $('R · Fiche').first().json).instagram_id || 'aucun' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,media_product_type,permalink"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "80a9058c-14fb-5362-a0f2-b39a638f5f39",
+      "name": "R · IG objet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        550
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.graph }}/{{ ($('R · Fiche').first().json.data ?? $('R · Fiche').first().json).facebook_id || 'aucun' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,permalink_url,status"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "1b37b455-3c8c-5662-beaf-0c590977a220",
+      "name": "R · FB objet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2860,
+        550
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "fileSelector": "={{ ($('R · Fiche').first().json.data ?? $('R · Fiche').first().json).video_path || '/introuvable.mp4' }}",
         "options": {
           "dataPropertyName": "data"
         }
@@ -542,7 +624,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Fiche du jour + URL publique de la vidéo → données pour le sous-workflow « Meta - Publier Reel »\nconst ev = $('Évaluer').first().json;\nconst lire = n => { try { return $(n).first().json; } catch (x) { return {}; } };\nlet fiche = lire('R · Fiche');\nfiche = fiche.data ?? fiche;\nif (Array.isArray(fiche)) fiche = fiche[0] || {};\nconst media = lire('R · Héberger');\n// Anti-doublon : publication du jour encore en cours (< 1 h), ou plateforme publiée d'après la fiche il y a moins d'1 h\n// (le temps qu'elle apparaisse dans l'API). Au-delà, un ID sans Reel visible = Reel réellement manquant → on republie.\nconst minutes = t => t ? (Date.now() - Date.parse(t)) / 60000 : Infinity;\nconst ageMin = minutes(fiche.ecrit_a);\nconst ageFin = minutes(fiche.rattrape_a || fiche.termine_a);\nconst recent = ageFin < 60;\nconst instagram = ev.rat.instagram >= 0 && !(fiche.instagram_id && recent);\nconst facebook = ev.rat.facebook >= 0 && !(fiche.facebook_id && recent);\nlet raison = '';\nif (!fiche || !fiche.video_path) raison = 'fiche du jour introuvable (_publications/' + $now.setZone('Europe/Paris').toISODate() + '.json)';\nelse if (fiche.statut === 'en_cours' && ageMin < 60) raison = `publication du jour encore en cours (lancée il y a ${Math.round(ageMin)} min) — pas de rattrapage pour éviter un doublon`;\nelse if (!instagram && !facebook) raison = `publié il y a ${Math.round(ageFin)} min d'après la fiche (Instagram ${fiche.instagram_id || '—'}, Facebook ${fiche.facebook_id || '—'}) : pas encore visible dans l'API ?`;\nelse if (!media.url) raison = 'vidéo non hébergée : ' + String(media.error || media.message || 'fichier ' + fiche.video_path + ' illisible').slice(0, 200);\nreturn [{ json: {\n  publier: !raison, raison,\n  fiche,\n  video_url: media.url || '',\n  caption: fiche.caption, fb_title: fiche.fb_title, fb_description: fiche.fb_description,\n  share_to_feed: fiche.share_to_feed,\n  instagram, facebook,\n  alerter: false,\n  contexte: 'Rattrapage automatique — ' + (fiche.folder || ''),\n} }];\n"
+        "jsCode": "// Fiche du jour + URL publique de la vidéo → données pour le sous-workflow « Meta - Publier Reel »\nconst ev = $('Évaluer').first().json;\nconst lire = n => { try { return $(n).first().json; } catch (x) { return {}; } };\nlet fiche = lire('R · Fiche');\nfiche = fiche.data ?? fiche;\nif (Array.isArray(fiche)) fiche = fiche[0] || {};\nconst media = lire('R · Héberger');\n// Anti-doublon : publication du jour encore en cours (< 1 h), ou plateforme dont l'ID de la fiche existe toujours\n// (lu directement : GET /{id}). On ne republie que si l'objet est introuvable ou en erreur.\nconst minutes = t => t ? (Date.now() - Date.parse(t)) / 60000 : Infinity;\nconst ageMin = minutes(fiche.ecrit_a);\nconst objIG = lire('R · IG objet'), objFB = lire('R · FB objet');\nconst enLigneIG = !!(fiche.instagram_id && objIG.id && !objIG.error);\nconst enLigneFB = !!(fiche.facebook_id && objFB.id && !objFB.error && objFB.status?.video_status !== 'error');\nconst instagram = ev.rat.instagram >= 0 && !enLigneIG;\nconst facebook = ev.rat.facebook >= 0 && !enLigneFB;\nlet raison = '';\nif (!fiche || !fiche.video_path) raison = 'fiche du jour introuvable (_publications/' + $now.setZone('Europe/Paris').toISODate() + '.json)';\nelse if (fiche.statut === 'en_cours' && ageMin < 60) raison = `publication du jour encore en cours (lancée il y a ${Math.round(ageMin)} min) — pas de rattrapage pour éviter un doublon`;\nelse if (!instagram && !facebook) raison = `déjà en ligne d'après l'API (Instagram ${fiche.instagram_id || '—'}, Facebook ${fiche.facebook_id || '—'}), non retrouvé par la recherche du jour`;\nelse if (!media.url) raison = 'vidéo non hébergée : ' + String(media.error || media.message || 'fichier ' + fiche.video_path + ' illisible').slice(0, 200);\nreturn [{ json: {\n  publier: !raison, raison,\n  fiche,\n  video_url: media.url || '',\n  caption: fiche.caption, fb_title: fiche.fb_title, fb_description: fiche.fb_description,\n  share_to_feed: fiche.share_to_feed,\n  instagram, facebook,\n  alerter: false,\n  contexte: 'Rattrapage automatique — ' + (fiche.folder || ''),\n} }];\n"
       },
       "id": "14c36e0b-fe14-566d-a7a3-7809f34f37c3",
       "name": "R · Préparer",
@@ -682,7 +764,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Réécrit le bilan de « Évaluer » avec le résultat du rattrapage.\nconst e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst ev = $('Évaluer').first().json;\nconst lire = n => { try { return $(n).first().json; } catch (x) { return null; } };\nconst prep = lire('R · Préparer') || { raison: 'rattrapage non lancé' };\nconst res = lire('R · Publier') || {};\nconst pb = [...ev.pb];\nconst fiche = prep.fiche || {};\nconst maj = (idx, nom, cle) => {\n  if (idx < 0) return;\n  const idFiche = fiche[cle + '_id'];\n  if (idFiche && prep[cle] === false && !/encore en cours/.test(prep.raison || ''))\n    pb[idx] = `ℹ️ ${nom} : publié il y a moins d'1 h d'après la fiche du jour (${e(idFiche)}), pas encore visible dans l'API — pas de republication`;\n  else if (res[cle + '_id']) pb[idx] = `🔁 ${nom} : Reel manquant, republié automatiquement (${e(res[cle + '_id'])})`;\n  else pb[idx] += ` — rattrapage échoué : ${e(prep.raison || res[cle + '_erreur'] || res.error?.message || 'erreur inconnue')}`;\n};\nmaj(ev.rat.instagram, 'Instagram', 'instagram');\nmaj(ev.rat.facebook, 'Facebook', 'facebook');\nconst vrais = pb.filter(x => !x.startsWith('🔁') && !x.startsWith('ℹ️'));\nconst titre = vrais.length ? `🚨 <b>${ev.label} — ${vrais.length} problème(s)</b>`\n  : pb.some(x => x.startsWith('🔁')) ? `🔁 <b>${ev.label} — Reel rattrapé</b>` : `ℹ️ <b>${ev.label} — rien à rattraper</b>`;\nconst texte = `${titre} (${ev.entete})\\n\\n` + [...pb, ...(ev.test ? ev.ok.map(x => '✔️ ' + x) : [])].join('\\n');\nreturn [{ json: { envoyer: true, problemes: vrais.length, texte: texte.slice(0, 4000), chat_id: ev.chat_id } }];\n"
+        "jsCode": "// Réécrit le bilan de « Évaluer » avec le résultat du rattrapage.\nconst e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst ev = $('Évaluer').first().json;\nconst lire = n => { try { return $(n).first().json; } catch (x) { return null; } };\nconst prep = lire('R · Préparer') || { raison: 'rattrapage non lancé' };\nconst res = lire('R · Publier') || {};\nconst pb = [...ev.pb];\nconst fiche = prep.fiche || {};\nconst maj = (idx, nom, cle) => {\n  if (idx < 0) return;\n  const idFiche = fiche[cle + '_id'];\n  if (idFiche && prep[cle] === false && !/encore en cours/.test(prep.raison || ''))\n    pb[idx] = `ℹ️ ${nom} : publié (${e(idFiche)}) et toujours en ligne d'après l'API, mais non retrouvé par la recherche du jour — pas de republication`;\n  else if (res[cle + '_id']) pb[idx] = `🔁 ${nom} : Reel manquant, republié automatiquement (${e(res[cle + '_id'])})`;\n  else pb[idx] += ` — rattrapage échoué : ${e(prep.raison || res[cle + '_erreur'] || res.error?.message || 'erreur inconnue')}`;\n};\nmaj(ev.rat.instagram, 'Instagram', 'instagram');\nmaj(ev.rat.facebook, 'Facebook', 'facebook');\nconst vrais = pb.filter(x => !x.startsWith('🔁') && !x.startsWith('ℹ️'));\nconst titre = vrais.length ? `🚨 <b>${ev.label} — ${vrais.length} problème(s)</b>`\n  : pb.some(x => x.startsWith('🔁')) ? `🔁 <b>${ev.label} — Reel rattrapé</b>` : `ℹ️ <b>${ev.label} — rien à rattraper</b>`;\nconst texte = `${titre} (${ev.entete})\\n\\n` + [...pb, ...(ev.test ? ev.ok.map(x => '✔️ ' + x) : [])].join('\\n');\nreturn [{ json: { envoyer: true, problemes: vrais.length, texte: texte.slice(0, 4000), chat_id: ev.chat_id } }];\n"
       },
       "id": "f9db0455-0f06-56cd-89f4-dacff6e3678d",
       "name": "R · Bilan",
@@ -905,6 +987,28 @@
       ]
     },
     "R · Fiche": {
+      "main": [
+        [
+          {
+            "node": "R · IG objet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "R · IG objet": {
+      "main": [
+        [
+          {
+            "node": "R · FB objet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "R · FB objet": {
       "main": [
         [
           {

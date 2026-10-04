@@ -213,7 +213,7 @@ def build():
         link(a, b)
     link('Envoyer ?', 'Alerte Telegram', 0)
     link('Évaluer', 'Rattraper ?')
-    verif_rattrapage.ajouter(nodes, link, NS, node, http, 'WFKPD7GzMgbEuM5F', '/files/vocabag/_publications', CRED_DB, SQL_JS, 2200)
+    verif_rattrapage.ajouter(nodes, link, NS, node, http, 'WFKPD7GzMgbEuM5F', '/files/vocabag/_publications', CRED_DB, SQL_JS, 2200, cred_fb=CRED_FB)
     for n in nodes:   # « Envoyer ? » / Telegram après la branche de rattrapage
         if n['name'] == 'Envoyer ?':
             n['position'] = [4840, 100]
