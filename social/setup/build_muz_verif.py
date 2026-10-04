@@ -130,8 +130,8 @@ const f = $('R · Préparer').first().json.fiche || {};
 const r = $input.first().json;
 const id = parseInt(f.db_id, 10);
 const sets = [];
-if (r.instagram_id) sets.push('posted_on_instagram = 1');
-if (r.facebook_id) sets.push('posted_on_facebook = 1');
+if (r.instagram_id) sets.push('posted_on_instagram = 1, posted_instagram_at = NOW()');
+if (r.facebook_id) sets.push('posted_on_facebook = 1, posted_facebook_at = NOW()');
 return [{ json: { ...r, sql: sets.length && id > 0 ? `UPDATE muzrappel SET ${sets.join(', ')} WHERE id = ${id}` : '' } }];
 """
 

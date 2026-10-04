@@ -612,7 +612,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Suivi favima_bdd.muzrappel après rattrapage (id de la ligne lu dans la fiche du jour)\nconst f = $('R · Préparer').first().json.fiche || {};\nconst r = $input.first().json;\nconst id = parseInt(f.db_id, 10);\nconst sets = [];\nif (r.instagram_id) sets.push('posted_on_instagram = 1');\nif (r.facebook_id) sets.push('posted_on_facebook = 1');\nreturn [{ json: { ...r, sql: sets.length && id > 0 ? `UPDATE muzrappel SET ${sets.join(', ')} WHERE id = ${id}` : '' } }];\n"
+        "jsCode": "// Suivi favima_bdd.muzrappel après rattrapage (id de la ligne lu dans la fiche du jour)\nconst f = $('R · Préparer').first().json.fiche || {};\nconst r = $input.first().json;\nconst id = parseInt(f.db_id, 10);\nconst sets = [];\nif (r.instagram_id) sets.push('posted_on_instagram = 1, posted_instagram_at = NOW()');\nif (r.facebook_id) sets.push('posted_on_facebook = 1, posted_facebook_at = NOW()');\nreturn [{ json: { ...r, sql: sets.length && id > 0 ? `UPDATE muzrappel SET ${sets.join(', ')} WHERE id = ${id}` : '' } }];\n"
       },
       "id": "a3388601-32e2-55d6-b978-c5e811dabfd9",
       "name": "R · Suivi SQL",

@@ -201,3 +201,8 @@ Workflow `eSABPiZmB8tjkT39` (21h Paris). Branche YouTube inchangée. Branche Ins
   URL publique) → sous-workflow (alerter=false) → UPDATE du suivi → message « 🔁 … republié automatiquement » ou raison de l'échec.
   YouTube manquant : alerte seulement. Chaîne testée de bout en bout le 2026-10-04 (publication simulée).
 - Sauvegardes avant modification : `/root/n8n-backup-ig-via-fb-20261004/*_avant_meta_reel.json`.
+
+## Dates de publication — `posted_*_at` (2026-10-04)
+Migration `sql/001_muzrappel_posted_at.sql` appliquée (colonnes `posted_youtube_at`, `posted_instagram_at`, `posted_facebook_at`,
+DATETIME NULL). **Heures en UTC** (fuseau du serveur MySQL). Remplies par Muzrappel Video (`… = NOW()` dans les 3 UPDATE) et par le
+rattrapage de « Muzrappel - Vérification ». Lignes publiées avant le 2026-10-04 : NULL.
