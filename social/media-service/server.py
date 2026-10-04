@@ -7,6 +7,7 @@ Rôles :
   POST /render   {template, data} → HTML rendu par Chromium (Playwright) en 1080x1920 → JPEG public
                  (templates VocaBag + muz_question / muz_answer pour les stories quiz Muz Rappel)
   POST /muz/reel-story  {date?} → extrait < 60 s (coupé entre deux phrases) du Reel Muz Rappel du jour → MP4 public
+  POST /recycle  {url, bandeau?: 'muz'} → même extrait à partir d'un Reel déjà publié (recyclage en story)
   POST /detect-langues  {images, modele} → langue(s) enseignée(s) lues sur les images (Claude, ../blog/detection.py)
   POST /emojis  {mots, categorie, modele} → un émoji par mot, tous différents (Claude, ../blog/emojis.py)
   POST /blog/*   articles de blog tirés des carrousels (voir ../blog/blogfile.py) :
@@ -411,30 +412,68 @@ def muz_reel_story(payload: dict) -> dict:
     if not finales:
         return {'absent': True, 'date': jour}
     finale = max(finales, key=lambda p: p.stat().st_mtime)
+    repere = finale.with_name('render.mp4') if finale.with_name('render.mp4').exists() else finale
+    res = _extrait_story(finale, repere, bandeau=True)
+    return {'absent': False, 'date': jour, 'dossier': finale.parent.name, **res}
+
+
+def _extrait_story(source: Path, repere: Path, bandeau: bool, min_coupe: float = 20.0) -> dict:
+    """Extrait < 60 s de `source`, coupé entre deux phrases (silences lus dans `repere`), fondu de fin,
+    et si `bandeau` le bandeau Muz « La vidéo complète est sur notre compte » sur les dernières secondes."""
+    import subprocess
     duree = float(subprocess.run(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0',
-                                  str(finale)], capture_output=True, text=True, timeout=60).stdout.strip() or 0)
+                                  str(source)], capture_output=True, text=True, timeout=60).stdout.strip() or 0)
     coupe = min(duree, STORY_MAX_S)
     if duree > STORY_MAX_S:
-        repere = finale.with_name('render.mp4') if finale.with_name('render.mp4').exists() else finale
         # dernière pause qui commence avant la limite : on coupe juste après son début (fin de phrase)
-        candidats = [d for d, f in _pauses(repere) if 20 <= d + 0.3 <= STORY_MAX_S]
+        candidats = [d for d, f in _pauses(repere) if min_coupe <= d + 0.3 <= STORY_MAX_S]
         coupe = (max(candidats) + 0.3) if candidats else STORY_MAX_S
     fondu = max(0.0, coupe - 0.6)
     debut_bandeau = max(0.0, coupe - BANDEAU_S)
     out = _now_dir() / f"{secrets.token_urlsafe(18)}.mp4"
-    # Bandeau « vidéo complète » en fondu sur les dernières secondes (l'extrait s'arrête en cours de vidéo).
-    filtre = (f"[1:v]format=rgba,fade=t=in:st={debut_bandeau:.2f}:d=0.5:alpha=1[b];"
-              f"[0:v][b]overlay=x=(W-w)/2:y={BANDEAU_Y}:shortest=1:enable='gte(t,{debut_bandeau:.2f})',"
-              f"fade=t=out:st={fondu:.2f}:d=0.6[v]")
-    subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', str(finale),
-                    '-loop', '1', '-i', str(_muz_bandeau()), '-t', f'{coupe:.2f}',
-                    '-filter_complex', filtre, '-map', '[v]', '-map', '0:a',
+    if bandeau:
+        # Bandeau « vidéo complète » en fondu sur les dernières secondes (l'extrait s'arrête en cours de vidéo).
+        entrees = ['-loop', '1', '-i', str(_muz_bandeau())]
+        filtre = (f"[1:v]format=rgba,fade=t=in:st={debut_bandeau:.2f}:d=0.5:alpha=1[b];"
+                  f"[0:v][b]overlay=x=(W-w)/2:y={BANDEAU_Y}:shortest=1:enable='gte(t,{debut_bandeau:.2f})',"
+                  f"fade=t=out:st={fondu:.2f}:d=0.6[v]")
+    else:
+        entrees = []
+        filtre = f"[0:v]fade=t=out:st={fondu:.2f}:d=0.6[v]"
+    subprocess.run(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', str(source), *entrees,
+                    '-t', f'{coupe:.2f}', '-filter_complex', filtre, '-map', '[v]', '-map', '0:a',
                     '-af', f'afade=t=out:st={fondu:.2f}:d=0.6',
                     '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-c:a', 'aac', '-b:a', '128k',
                     '-movflags', '+faststart', str(out)], check=True, timeout=600)
     out.chmod(0o644)
-    return {'absent': False, 'date': jour, 'dossier': finale.parent.name, 'duree_source': round(duree, 2),
-            'duree': round(coupe, 2), 'url': _public_url(out), 'bytes': out.stat().st_size}
+    return {'duree_source': round(duree, 2), 'duree': round(coupe, 2), 'url': _public_url(out),
+            'bytes': out.stat().st_size}
+
+
+# ---------------------------------------------------------------- /recycle
+def recycle(payload: dict) -> dict:
+    """{url, bandeau?: 'muz'} → extrait story (< 60 s) d'un Reel déjà publié (media_url Instagram, fichier public…)."""
+    import urllib.request
+    url = str(payload.get('url') or '')
+    if not url.startswith('https://'):
+        raise ValueError('url https requise')
+    tmp = BASE_DIR / 'tmp' / f"recycle_{secrets.token_hex(8)}.mp4"
+    tmp.parent.mkdir(exist_ok=True)
+    try:
+        with urllib.request.urlopen(url, timeout=120) as r, open(tmp, 'wb') as f:
+            total = 0
+            while True:
+                bloc = r.read(1 << 20)
+                if not bloc:
+                    break
+                total += len(bloc)
+                if total > MAX_BYTES:
+                    raise ValueError('vidéo trop lourde')
+                f.write(bloc)
+        # Vidéo publiée = voix + musique : peu de pauses détectables → coupe entre 40 et 59 s, sinon à 59 s
+        return _extrait_story(tmp, tmp, bandeau=payload.get('bandeau') == 'muz', min_coupe=40.0)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------- /blog/*
@@ -523,6 +562,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, emojis.choisir(p.get('mots') or [], p.get('categorie', ''), p.get('modele', 'haiku')))
             if route == '/muz/reel-story':
                 return self._send(200, muz_reel_story(json.loads(raw or b'{}')))
+            if route == '/recycle':
+                return self._send(200, recycle(json.loads(raw)))
             if route.startswith('/blog/'):
                 return self._send(200, blog(route[6:], json.loads(raw)))
             return self._send(404, {'error': 'not found'})

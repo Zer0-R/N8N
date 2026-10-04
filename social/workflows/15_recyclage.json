@@ -1,0 +1,1632 @@
+{
+  "name": "Recyclage Reels en story",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "68acc22d-f212-5009-9167-f0a5dc3fc6bd",
+      "name": "Test manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                6
+              ],
+              "triggerAtHour": 11
+            }
+          ]
+        }
+      },
+      "id": "7fd216ae-5f7a-563f-8d90-346a9115df31",
+      "name": "MZ · Planifié",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  cle: 'MZ', label: 'Muz Rappel', ig_user: '17841472522032723', fb_page: '501465773057138', bandeau: 'muz',\n  jours_min: 14, jours_max: 120,     // âge du Reel recyclé\n  ig_essais: 20,                     // statut du conteneur story : 20 x 20 s max\n  chat_id: '6980427615',\n  simulation: false,                 // true : choisit et prépare l'extrait, ne publie rien\n} }];\n"
+      },
+      "id": "31f84aa8-fdee-59c3-a3fe-9821695d9dea",
+      "name": "MZ · Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.facebook.com/v23.0/17841472522032723/media",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,timestamp,caption,like_count,comments_count,media_url,media_product_type,permalink"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        }
+      },
+      "id": "473250bc-2170-5789-84ff-aa8f14724c5c",
+      "name": "MZ · IG médias",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meilleur Reel de 14 à 120 jours jamais recyclé (likes + 2 × commentaires)\nconst cfg = $('MZ · Config').first().json;\nconst memo = $getWorkflowStaticData('global');\nconst deja = new Set(memo['recycles_' + cfg.cle] || []);\nconst now = DateTime.now();\nconst l = ($input.first().json.data || []).filter(m => {\n  const age = now.diff(DateTime.fromISO(m.timestamp), 'days').days;\n  return m.media_product_type === 'REELS' && m.media_url && age >= cfg.jours_min && age <= cfg.jours_max && !deja.has(m.id);\n}).map(m => ({ ...m, score: Number(m.like_count || 0) + 2 * Number(m.comments_count || 0) }))\n  .sort((a, b) => b.score - a.score);\nif (!l.length) return [];\nconst m = l[0];\nreturn [{ json: { media_id: m.id, media_url: m.media_url, permalink: m.permalink, score: m.score,\n                  likes: m.like_count, coms: m.comments_count, date: m.timestamp,\n                  titre: String(m.caption || '').split('\\n')[0].slice(0, 90) } }];\n"
+      },
+      "id": "bfd1fa52-4bb9-5ab5-b2d1-66026b91f923",
+      "name": "MZ · Choisir",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8791/recycle",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 600000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: $json.media_url, bandeau: $('MZ · Config').first().json.bandeau }) }}"
+      },
+      "id": "6f7cb720-5898-59d5-af03-47f8a55cdc1b",
+      "name": "MZ · Extrait",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L2zYP3cEvAgZVffN",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "0f011123-a5df-52a8-b347-a40206790677",
+              "leftValue": "={{ !!$json.url && !$('MZ · Config').first().json.simulation }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d5a60b8b-c9b1-5484-b917-9b80270ede88",
+      "name": "MZ · Publier ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/17841472522032723/media",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "media_type",
+              "value": "STORIES"
+            },
+            {
+              "name": "video_url",
+              "value": "={{ $('MZ · Extrait').first().json.url }}"
+            }
+          ]
+        }
+      },
+      "id": "a3f6e44c-35d8-5516-9c84-0d996404b895",
+      "name": "MZ · IG conteneur",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        -100
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 20,
+        "unit": "seconds"
+      },
+      "id": "4986eb75-a04d-5116-a4b6-60c207ea3b91",
+      "name": "MZ · IG attente",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        -100
+      ],
+      "webhookId": "2e0d6549-6f51-5152-bbed-e56e7b2747b5"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v23.0/{{ $('MZ · IG conteneur').first().json.id }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "status_code,status"
+            }
+          ]
+        }
+      },
+      "id": "a0b4c1b1-07d7-5770-ba49-3c3357387455",
+      "name": "MZ · IG statut",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        -100
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "a9b52840-9357-5750-9b86-1b2b3fab9229",
+              "leftValue": "={{ $json.status_code === 'FINISHED' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "86e30465-2ec7-5b41-8b08-a33d908a6c91",
+      "name": "MZ · IG prête ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "8dfb86ea-3814-558b-8f1c-d99d4ddfab86",
+              "leftValue": "={{ $json.status_code === 'IN_PROGRESS' && $runIndex < $('MZ · Config').first().json.ig_essais }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "378907cb-0306-50fe-9be6-a4a91902ee1c",
+      "name": "MZ · IG encore ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/17841472522032723/media_publish",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "creation_id",
+              "value": "={{ $('MZ · IG conteneur').first().json.id }}"
+            }
+          ]
+        }
+      },
+      "id": "fc08bc75-a0b5-5360-b172-ba48f2a98692",
+      "name": "MZ · IG publier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        -200
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/501465773057138/video_stories",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "upload_phase",
+              "value": "start"
+            }
+          ]
+        }
+      },
+      "id": "9210b1ae-8be5-5aee-9bd5-bfecbf796033",
+      "name": "MZ · FB démarrer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        -100
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('MZ · Extrait').first().json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          },
+          "timeout": 300000
+        }
+      },
+      "id": "68d9b7a1-983a-52f6-8025-926e930d3306",
+      "name": "MZ · FB télécharger",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        -100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Taille exacte du fichier : requise par rupload.facebook.com (en-tête file_size).\nconst buf = await this.helpers.getBinaryDataBuffer(0, 'data');\nreturn [{ json: { file_size: buf.length }, binary: $input.first().binary }];\n"
+      },
+      "id": "daa44c44-8fdf-5280-bb8a-3b72ab57c2b3",
+      "name": "MZ · FB taille",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('MZ · FB démarrer').first().json.upload_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "offset",
+              "value": "0"
+            },
+            {
+              "name": "file_size",
+              "value": "={{ $json.file_size }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data"
+      },
+      "id": "8ba85240-9a66-5306-a215-ae62c7ae3081",
+      "name": "MZ · FB envoyer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        -100
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/501465773057138/video_stories",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "upload_phase",
+              "value": "finish"
+            },
+            {
+              "name": "video_id",
+              "value": "={{ $('MZ · FB démarrer').first().json.video_id }}"
+            }
+          ]
+        }
+      },
+      "id": "db5ff064-c2f5-5016-863a-c1fa43ead974",
+      "name": "MZ · FB publier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        -100
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst A = 'MZ';\nconst cfg = $(`${A} · Config`).first().json;\nconst choix = $(`${A} · Choisir`).first().json;\nconst extrait = $(`${A} · Extrait`).first().json;\nconst lire = n => { try { return $(n).first().json; } catch (x) { return null; } };\nconst ig = lire(`${A} · IG publier`), fb = lire(`${A} · FB publier`), igst = lire(`${A} · IG statut`);\nconst okIG = !!ig?.id, okFB = !!(fb?.success || fb?.post_id);\nif ((okIG || okFB) && !cfg.simulation) {\n  const memo = $getWorkflowStaticData('global');\n  memo['recycles_' + A] = [...(memo['recycles_' + A] || []), choix.media_id].slice(-200);\n}\nconst etat = (ok, r, quoi) => cfg.simulation ? `${quoi} : simulation` :\n  ok ? `✔️ ${quoi} publiée` : `❌ ${quoi} : ${e(JSON.stringify(r?.error || r || 'non publiée').slice(0, 150))}`;\nconst texte = [\n  `♻️ <b>${e(cfg.label)} — Reel recyclé en story</b>${cfg.simulation ? ' (simulation)' : ''}`,\n  `« ${e(choix.titre)} »`,\n  `Publié le ${DateTime.fromISO(choix.date).setZone('Europe/Paris').toFormat('dd/MM/yyyy')} · ${choix.likes} likes · ${choix.coms} com.`,\n  extrait.url ? `Extrait : ${extrait.duree} s (sur ${extrait.duree_source} s)` : `❌ Extrait impossible : ${e(JSON.stringify(extrait).slice(0, 150))}`,\n  etat(okIG, ig || igst, 'Story Instagram'),\n  etat(okFB, fb, 'Story Facebook'),\n].join('\\n');\nreturn [{ json: { texte, chat_id: cfg.chat_id } }];\n"
+      },
+      "id": "25bd002f-32c9-5774-913a-4994398bef7b",
+      "name": "MZ · Bilan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "6e8a7608-3559-5574-9e16-12d05af69713",
+      "name": "MZ · Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3740,
+        0
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TnA0UuhJFPlr5QZu",
+          "name": "Telegram - muzrappelbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                6
+              ],
+              "triggerAtHour": 17
+            }
+          ]
+        }
+      },
+      "id": "5d14028a-20f6-5daa-87f8-85cfc5f6bf56",
+      "name": "VB · Planifié",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  cle: 'VB', label: 'VocaBag', ig_user: '17841449858344452', fb_page: '1361049150428275', bandeau: '',\n  jours_min: 14, jours_max: 120,     // âge du Reel recyclé\n  ig_essais: 20,                     // statut du conteneur story : 20 x 20 s max\n  chat_id: '6980427615',\n  simulation: false,                 // true : choisit et prépare l'extrait, ne publie rien\n} }];\n"
+      },
+      "id": "b10bbbad-e939-5881-9efb-fd588d281ceb",
+      "name": "VB · Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.facebook.com/v23.0/17841449858344452/media",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,timestamp,caption,like_count,comments_count,media_url,media_product_type,permalink"
+            },
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        }
+      },
+      "id": "71f487e0-d493-5a33-b3e7-fbb8c875b132",
+      "name": "VB · IG médias",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        600
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Meilleur Reel de 14 à 120 jours jamais recyclé (likes + 2 × commentaires)\nconst cfg = $('VB · Config').first().json;\nconst memo = $getWorkflowStaticData('global');\nconst deja = new Set(memo['recycles_' + cfg.cle] || []);\nconst now = DateTime.now();\nconst l = ($input.first().json.data || []).filter(m => {\n  const age = now.diff(DateTime.fromISO(m.timestamp), 'days').days;\n  return m.media_product_type === 'REELS' && m.media_url && age >= cfg.jours_min && age <= cfg.jours_max && !deja.has(m.id);\n}).map(m => ({ ...m, score: Number(m.like_count || 0) + 2 * Number(m.comments_count || 0) }))\n  .sort((a, b) => b.score - a.score);\nif (!l.length) return [];\nconst m = l[0];\nreturn [{ json: { media_id: m.id, media_url: m.media_url, permalink: m.permalink, score: m.score,\n                  likes: m.like_count, coms: m.comments_count, date: m.timestamp,\n                  titre: String(m.caption || '').split('\\n')[0].slice(0, 90) } }];\n"
+      },
+      "id": "3907299f-b57e-5d5b-a2c3-610bcd46d173",
+      "name": "VB · Choisir",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8791/recycle",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 600000
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ url: $json.media_url, bandeau: $('VB · Config').first().json.bandeau }) }}"
+      },
+      "id": "99292960-ddba-5f1c-b88f-c89b8c8ae233",
+      "name": "VB · Extrait",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        600
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "L2zYP3cEvAgZVffN",
+          "name": "VocaBag media (X-Media-Token)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "c7de5fd9-d4d0-549d-82e3-ffe9881a28cf",
+              "leftValue": "={{ !!$json.url && !$('VB · Config').first().json.simulation }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "82e7c8d7-c0eb-58e7-9196-5780c87d4a64",
+      "name": "VB · Publier ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/17841449858344452/media",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "media_type",
+              "value": "STORIES"
+            },
+            {
+              "name": "video_url",
+              "value": "={{ $('VB · Extrait').first().json.url }}"
+            }
+          ]
+        }
+      },
+      "id": "bad7a8f3-d1ad-5069-b64d-06557a04352b",
+      "name": "VB · IG conteneur",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        500
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 20,
+        "unit": "seconds"
+      },
+      "id": "93c5fa24-421d-5e42-8c02-5064a125e8cc",
+      "name": "VB · IG attente",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1540,
+        500
+      ],
+      "webhookId": "2f2959aa-6ac1-5e1b-b9ec-3ddb1d8f500f"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v23.0/{{ $('VB · IG conteneur').first().json.id }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "status_code,status"
+            }
+          ]
+        }
+      },
+      "id": "ccc38dec-7930-5cb6-b048-4301b61e4480",
+      "name": "VB · IG statut",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        500
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "473dc657-9b59-52e4-8868-bfb214907fc7",
+              "leftValue": "={{ $json.status_code === 'FINISHED' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "15a15dbe-3e4f-5bb3-938a-8ecee0b9e7f8",
+      "name": "VB · IG prête ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1980,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "aa0b82f8-ec4d-5676-bcee-b3090b141781",
+              "leftValue": "={{ $json.status_code === 'IN_PROGRESS' && $runIndex < $('VB · Config').first().json.ig_essais }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "991f6d36-11df-5620-9f86-fa615fe38458",
+      "name": "VB · IG encore ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/17841449858344452/media_publish",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "creation_id",
+              "value": "={{ $('VB · IG conteneur').first().json.id }}"
+            }
+          ]
+        }
+      },
+      "id": "2c438939-a748-5ff1-9803-fc36959aeeef",
+      "name": "VB · IG publier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2200,
+        400
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/1361049150428275/video_stories",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "upload_phase",
+              "value": "start"
+            }
+          ]
+        }
+      },
+      "id": "f5c1c321-9b79-58b5-ae2b-1ee7aee55b32",
+      "name": "VB · FB démarrer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2420,
+        500
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('VB · Extrait').first().json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          },
+          "timeout": 300000
+        }
+      },
+      "id": "629ec891-27a8-5e07-9cb8-86312f695059",
+      "name": "VB · FB télécharger",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        500
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Taille exacte du fichier : requise par rupload.facebook.com (en-tête file_size).\nconst buf = await this.helpers.getBinaryDataBuffer(0, 'data');\nreturn [{ json: { file_size: buf.length }, binary: $input.first().binary }];\n"
+      },
+      "id": "71aa3edb-36b8-5b92-b7c9-5eeae8c5da44",
+      "name": "VB · FB taille",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2860,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('VB · FB démarrer').first().json.upload_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "offset",
+              "value": "0"
+            },
+            {
+              "name": "file_size",
+              "value": "={{ $json.file_size }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data"
+      },
+      "id": "94124b5e-1964-578d-ac54-0fa04ad20522",
+      "name": "VB · FB envoyer",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3080,
+        500
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v23.0/1361049150428275/video_stories",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 120000
+        },
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "upload_phase",
+              "value": "finish"
+            },
+            {
+              "name": "video_id",
+              "value": "={{ $('VB · FB démarrer').first().json.video_id }}"
+            }
+          ]
+        }
+      },
+      "id": "623cd8ca-54db-5301-b4df-58ae5e45c039",
+      "name": "VB · FB publier",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3300,
+        500
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst A = 'VB';\nconst cfg = $(`${A} · Config`).first().json;\nconst choix = $(`${A} · Choisir`).first().json;\nconst extrait = $(`${A} · Extrait`).first().json;\nconst lire = n => { try { return $(n).first().json; } catch (x) { return null; } };\nconst ig = lire(`${A} · IG publier`), fb = lire(`${A} · FB publier`), igst = lire(`${A} · IG statut`);\nconst okIG = !!ig?.id, okFB = !!(fb?.success || fb?.post_id);\nif ((okIG || okFB) && !cfg.simulation) {\n  const memo = $getWorkflowStaticData('global');\n  memo['recycles_' + A] = [...(memo['recycles_' + A] || []), choix.media_id].slice(-200);\n}\nconst etat = (ok, r, quoi) => cfg.simulation ? `${quoi} : simulation` :\n  ok ? `✔️ ${quoi} publiée` : `❌ ${quoi} : ${e(JSON.stringify(r?.error || r || 'non publiée').slice(0, 150))}`;\nconst texte = [\n  `♻️ <b>${e(cfg.label)} — Reel recyclé en story</b>${cfg.simulation ? ' (simulation)' : ''}`,\n  `« ${e(choix.titre)} »`,\n  `Publié le ${DateTime.fromISO(choix.date).setZone('Europe/Paris').toFormat('dd/MM/yyyy')} · ${choix.likes} likes · ${choix.coms} com.`,\n  extrait.url ? `Extrait : ${extrait.duree} s (sur ${extrait.duree_source} s)` : `❌ Extrait impossible : ${e(JSON.stringify(extrait).slice(0, 150))}`,\n  etat(okIG, ig || igst, 'Story Instagram'),\n  etat(okFB, fb, 'Story Facebook'),\n].join('\\n');\nreturn [{ json: { texte, chat_id: cfg.chat_id } }];\n"
+      },
+      "id": "aae05c23-e2ef-5905-a884-21b28c81f79d",
+      "name": "VB · Bilan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "c0cd896b-7077-5560-9740-799ee0d1db5c",
+      "name": "VB · Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3740,
+        600
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "MZ · Planifié": {
+      "main": [
+        [
+          {
+            "node": "MZ · Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test manuel": {
+      "main": [
+        [
+          {
+            "node": "MZ · Config",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "VB · Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · Config": {
+      "main": [
+        [
+          {
+            "node": "MZ · IG médias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · IG médias": {
+      "main": [
+        [
+          {
+            "node": "MZ · Choisir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · Choisir": {
+      "main": [
+        [
+          {
+            "node": "MZ · Extrait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · Extrait": {
+      "main": [
+        [
+          {
+            "node": "MZ · Publier ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · Publier ?": {
+      "main": [
+        [
+          {
+            "node": "MZ · IG conteneur",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MZ · Bilan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · IG conteneur": {
+      "main": [
+        [
+          {
+            "node": "MZ · IG attente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · IG attente": {
+      "main": [
+        [
+          {
+            "node": "MZ · IG statut",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · IG statut": {
+      "main": [
+        [
+          {
+            "node": "MZ · IG prête ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · IG prête ?": {
+      "main": [
+        [
+          {
+            "node": "MZ · IG publier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MZ · IG encore ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · IG encore ?": {
+      "main": [
+        [
+          {
+            "node": "MZ · IG attente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MZ · FB démarrer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · IG publier": {
+      "main": [
+        [
+          {
+            "node": "MZ · FB démarrer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · FB démarrer": {
+      "main": [
+        [
+          {
+            "node": "MZ · FB télécharger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · FB télécharger": {
+      "main": [
+        [
+          {
+            "node": "MZ · FB taille",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · FB taille": {
+      "main": [
+        [
+          {
+            "node": "MZ · FB envoyer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · FB envoyer": {
+      "main": [
+        [
+          {
+            "node": "MZ · FB publier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · FB publier": {
+      "main": [
+        [
+          {
+            "node": "MZ · Bilan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · Bilan": {
+      "main": [
+        [
+          {
+            "node": "MZ · Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · Planifié": {
+      "main": [
+        [
+          {
+            "node": "VB · Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · Config": {
+      "main": [
+        [
+          {
+            "node": "VB · IG médias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · IG médias": {
+      "main": [
+        [
+          {
+            "node": "VB · Choisir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · Choisir": {
+      "main": [
+        [
+          {
+            "node": "VB · Extrait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · Extrait": {
+      "main": [
+        [
+          {
+            "node": "VB · Publier ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · Publier ?": {
+      "main": [
+        [
+          {
+            "node": "VB · IG conteneur",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "VB · Bilan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · IG conteneur": {
+      "main": [
+        [
+          {
+            "node": "VB · IG attente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · IG attente": {
+      "main": [
+        [
+          {
+            "node": "VB · IG statut",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · IG statut": {
+      "main": [
+        [
+          {
+            "node": "VB · IG prête ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · IG prête ?": {
+      "main": [
+        [
+          {
+            "node": "VB · IG publier",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "VB · IG encore ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · IG encore ?": {
+      "main": [
+        [
+          {
+            "node": "VB · IG attente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "VB · FB démarrer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · IG publier": {
+      "main": [
+        [
+          {
+            "node": "VB · FB démarrer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · FB démarrer": {
+      "main": [
+        [
+          {
+            "node": "VB · FB télécharger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · FB télécharger": {
+      "main": [
+        [
+          {
+            "node": "VB · FB taille",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · FB taille": {
+      "main": [
+        [
+          {
+            "node": "VB · FB envoyer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · FB envoyer": {
+      "main": [
+        [
+          {
+            "node": "VB · FB publier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · FB publier": {
+      "main": [
+        [
+          {
+            "node": "VB · Bilan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · Bilan": {
+      "main": [
+        [
+          {
+            "node": "VB · Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris",
+    "errorWorkflow": "VbErreursAlerte1",
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

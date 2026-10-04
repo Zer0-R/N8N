@@ -1,0 +1,1125 @@
+{
+  "name": "Stats hebdo (VocaBag + Muz Rappel)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "37b65ef6-8511-5cb0-967c-f75bf9b661e1",
+      "name": "Planifié",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "911f24bd-f4ed-5fdf-99f9-a5ee6418eb17",
+      "name": "Test manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.facebook.com/v23.0/17841449858344452/media",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,timestamp,caption,like_count,comments_count,media_product_type"
+            },
+            {
+              "name": "limit",
+              "value": "30"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "b8459ba8-8d1e-568d-896b-b40970285ebc",
+      "name": "VB · IG médias",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        0
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const debut = DateTime.now().minus({ days: 8 });\nconst l = ($input.first().json.data || []).filter(m => m.media_product_type === 'REELS' && DateTime.fromISO(m.timestamp) >= debut);\nreturn l.length ? l.map(m => ({ json: { id: m.id } })) : [{ json: { id: '' } }];\n"
+      },
+      "id": "f62e35ea-381b-59a8-8a6f-778b2e2bc45f",
+      "name": "VB · IG cibles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v23.0/{{ $json.id || 'aucun' }}/insights",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "metric",
+              "value": "views"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "28fb4317-942f-5a39-b0f2-3db5b082cf36",
+      "name": "VB · IG vues",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        0
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.facebook.com/v23.0/17841449858344452",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "followers_count,media_count"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "7eafdc3a-5570-5a92-a572-c12b9aadc4d2",
+      "name": "VB · IG compte",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.facebook.com/v23.0/1361049150428275/videos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,title,created_time,views,permalink_url,likes.summary(true).limit(0),comments.summary(true).limit(0)"
+            },
+            {
+              "name": "limit",
+              "value": "30"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "db7f75d2-bca4-5611-a66e-c25bcee2422a",
+      "name": "VB · FB vidéos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        0
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.facebook.com/v23.0/1361049150428275",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "followers_count"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "53e5fb9b-6121-577c-9ee1-23cc1fb8e292",
+      "name": "VB · FB page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        0
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/channels",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "statistics,contentDetails"
+            },
+            {
+              "name": "mine",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "5a529f49-0c5f-500f-b03f-347406648d50",
+      "name": "VB · YT chaîne",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        0
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "1KMbY9e6VCrfiKfu",
+          "name": "YouTube account 3"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/playlistItems",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "contentDetails"
+            },
+            {
+              "name": "maxResults",
+              "value": "20"
+            },
+            {
+              "name": "playlistId",
+              "value": "={{ $json.items?.[0]?.contentDetails?.relatedPlaylists?.uploads || 'introuvable' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "3242f9d7-1183-55de-9d25-90d7caca8337",
+      "name": "VB · YT uploads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        0
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "1KMbY9e6VCrfiKfu",
+          "name": "YouTube account 3"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "snippet,statistics"
+            },
+            {
+              "name": "id",
+              "value": "={{ ($json.items || []).map(i => i.contentDetails.videoId).join(',') || 'aucun' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "34644903-29f9-518a-8bbb-c6d00e3c5cf8",
+      "name": "VB · YT stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        0
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "1KMbY9e6VCrfiKfu",
+          "name": "YouTube account 3"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst n = v => Number(v || 0);\nconst fmt = v => n(v).toLocaleString('fr-FR');\nconst A = 'VB', LABEL = 'VocaBag', PAR_LANGUE = true;\nconst get = x => { try { return $(x).first().json; } catch (err) { return {}; } };\nconst debut = DateTime.now().setZone('Europe/Paris').minus({ days: 7 });\nconst recent = t => t && DateTime.fromISO(String(t)) >= debut;\nconst erreurs = [];\nconst err = (j, quoi) => { if (j && j.error) erreurs.push(`${quoi} : ${e(j.error.message || JSON.stringify(j.error)).slice(0, 120)}`); };\n\n// --- YouTube\nconst ytc = get(`${A} · YT chaîne`), yts = get(`${A} · YT stats`);\nerr(ytc, 'YouTube'); err(yts, 'YouTube stats');\nconst yt = (yts.items || []).filter(v => recent(v.snippet?.publishedAt)).map(v => ({\n  titre: v.snippet.title, vues: n(v.statistics?.viewCount), likes: n(v.statistics?.likeCount), coms: n(v.statistics?.commentCount) }));\n// --- Instagram (vues seulement si instagram_manage_insights est accordée)\nconst igm = get(`${A} · IG médias`), igc = get(`${A} · IG compte`);\nerr(igm, 'Instagram'); err(igc, 'Instagram compte');\nconst vuesIG = {};\ntry { for (const it of $(`${A} · IG vues`).all()) { const d = it.json.data; if (Array.isArray(d)) for (const m of d) if (m.name === 'views') vuesIG[String(m.id).split('/')[0]] = n(m.values?.[0]?.value); } } catch (x) {}\nconst ig = (igm.data || []).filter(m => m.media_product_type === 'REELS' && recent(m.timestamp)).map(m => ({\n  titre: String(m.caption || '').split('\\n')[0].slice(0, 70), likes: n(m.like_count), coms: n(m.comments_count), vues: vuesIG[m.id] }));\n// --- Facebook (vidéos de Reel : permalien /reel/)\nconst fbv = get(`${A} · FB vidéos`), fbp = get(`${A} · FB page`);\nerr(fbv, 'Facebook'); err(fbp, 'Facebook page');\nconst fb = (fbv.data || []).filter(v => /\\/reel\\//.test(v.permalink_url || '') && recent(v.created_time)).map(v => ({\n  titre: v.title || '', vues: n(v.views), likes: n(v.likes?.summary?.total_count), coms: n(v.comments?.summary?.total_count) }));\n\n// --- Abonnés + évolution (staticData : exécutions planifiées uniquement)\nconst abo = { youtube: n(ytc.items?.[0]?.statistics?.subscriberCount), instagram: n(igc.followers_count), facebook: n(fbp.followers_count) };\nconst memo = $getWorkflowStaticData('global');\nconst avant = memo[A] || null;\nmemo[A] = abo;\nconst delta = k => avant ? ` (${abo[k] - avant[k] >= 0 ? '+' : ''}${abo[k] - avant[k]})` : '';\n\nconst somme = (l, k) => l.reduce((s, x) => s + n(x[k]), 0);\nconst lignes = [];\nlignes.push(`📊 <b>${LABEL} — semaine du ${debut.toFormat('dd/MM')} au ${DateTime.now().setZone('Europe/Paris').minus({ days: 1 }).toFormat('dd/MM')}</b>`);\nlignes.push('');\nlignes.push(`▶️ <b>YouTube</b> : ${yt.length} vidéo(s) · ${fmt(somme(yt, 'vues'))} vues · ${fmt(somme(yt, 'likes'))} likes · ${fmt(somme(yt, 'coms'))} com.`);\nconst vIG = ig.some(x => x.vues != null) ? ` · ${fmt(somme(ig, 'vues'))} vues` : '';\nlignes.push(`📸 <b>Instagram</b> : ${ig.length} Reel(s)${vIG} · ${fmt(somme(ig, 'likes'))} likes · ${fmt(somme(ig, 'coms'))} com.`);\nlignes.push(`📘 <b>Facebook</b> : ${fb.length} Reel(s) · ${fmt(somme(fb, 'vues'))} vues · ${fmt(somme(fb, 'likes'))} likes · ${fmt(somme(fb, 'coms'))} com.`);\nlignes.push('');\nlignes.push(`👥 <b>Abonnés</b> : YouTube ${fmt(abo.youtube)}${delta('youtube')} · Instagram ${fmt(abo.instagram)}${delta('instagram')} · Facebook ${fmt(abo.facebook)}${delta('facebook')}`);\nconst top = [...yt].sort((a, b) => b.vues - a.vues).slice(0, 3);\nif (top.length) {\n  lignes.push('', '🏆 <b>Top YouTube</b>');\n  top.forEach((v, i) => lignes.push(`${i + 1}. ${e(v.titre)} — ${fmt(v.vues)} vues, ${fmt(v.likes)} likes`));\n}\nconst topIG = [...ig].sort((a, b) => (b.vues ?? b.likes) - (a.vues ?? a.likes)).slice(0, 3);\nif (topIG.length) {\n  lignes.push('', '🏆 <b>Top Instagram</b>');\n  topIG.forEach((v, i) => lignes.push(`${i + 1}. ${e(v.titre)} — ${v.vues != null ? fmt(v.vues) + ' vues, ' : ''}${fmt(v.likes)} likes`));\n}\nif (PAR_LANGUE && yt.length) {\n  const parL = {};\n  for (const v of yt) {\n    const t = String(v.titre);\n    const duel = t.match(/([A-ZÉÈ][\\p{L}-]+)\\s+(?:vs|VS|contre)\\.?\\s+([A-ZÉÈ][\\p{L}-]+)/u);\n    const m = t.match(/\\ben ([A-ZÉÈ][\\p{L}-]+)/u);\n    const l = duel ? `${duel[1]} vs ${duel[2]}` : m ? m[1] : 'autre';\n    parL[l] = parL[l] || { vues: 0, nb: 0 }; parL[l].vues += v.vues; parL[l].nb += 1;\n  }\n  lignes.push('', '🌍 <b>Vues YouTube par langue</b> (moyenne par vidéo)');\n  Object.entries(parL).sort((a, b) => b[1].vues / b[1].nb - a[1].vues / a[1].nb)\n    .forEach(([l, x]) => lignes.push(`• ${e(l)} : ${fmt(Math.round(x.vues / x.nb))} (${x.nb} vidéo${x.nb > 1 ? 's' : ''})`));\n}\nif (!ig.some(x => x.vues != null)) lignes.push('', '<i>Vues Instagram indisponibles : permission instagram_manage_insights à ajouter au token.</i>');\nif (erreurs.length) lignes.push('', '⚠️ ' + erreurs.join('\\n⚠️ '));\nreturn [{ json: { texte: lignes.join('\\n').slice(0, 4000), chat_id: '6980427615' } }];\n"
+      },
+      "id": "1c2db508-2462-5755-a97f-44dace1b6e16",
+      "name": "VB · Bilan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        0
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "ceb9162e-e0c7-5a34-adb0-447736816a5b",
+      "name": "VB · Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        0
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.facebook.com/v23.0/17841472522032723/media",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,timestamp,caption,like_count,comments_count,media_product_type"
+            },
+            {
+              "name": "limit",
+              "value": "30"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "923bb03e-c90b-5b44-845c-3fcba0827bcd",
+      "name": "MZ · IG médias",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const debut = DateTime.now().minus({ days: 8 });\nconst l = ($input.first().json.data || []).filter(m => m.media_product_type === 'REELS' && DateTime.fromISO(m.timestamp) >= debut);\nreturn l.length ? l.map(m => ({ json: { id: m.id } })) : [{ json: { id: '' } }];\n"
+      },
+      "id": "013fda58-f008-5154-984a-d40745690d25",
+      "name": "MZ · IG cibles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://graph.facebook.com/v23.0/{{ $json.id || 'aucun' }}/insights",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "metric",
+              "value": "views"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "17fb7bb9-6e0c-5c53-9e93-cba23830a1e1",
+      "name": "MZ · IG vues",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.facebook.com/v23.0/17841472522032723",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "followers_count,media_count"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "c517c063-14bc-5eda-b1d5-c295d85e02a7",
+      "name": "MZ · IG compte",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.facebook.com/v23.0/501465773057138/videos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,title,created_time,views,permalink_url,likes.summary(true).limit(0),comments.summary(true).limit(0)"
+            },
+            {
+              "name": "limit",
+              "value": "30"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "f384b657-e314-5c97-8554-029860710328",
+      "name": "MZ · FB vidéos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://graph.facebook.com/v23.0/501465773057138",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "followers_count"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "9fbfb102-2aa5-59a4-bb81-bd39fb016716",
+      "name": "MZ · FB page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        300
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "SZI9tiIqTC821bCa",
+          "name": "Facebook Graph account 2"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/channels",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "statistics,contentDetails"
+            },
+            {
+              "name": "mine",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "b5d502ea-0859-5a64-b9bf-17ecc07d81ec",
+      "name": "MZ · YT chaîne",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        300
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "cwYHFUad2DZdTq0k",
+          "name": "YouTube account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/playlistItems",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "contentDetails"
+            },
+            {
+              "name": "maxResults",
+              "value": "20"
+            },
+            {
+              "name": "playlistId",
+              "value": "={{ $json.items?.[0]?.contentDetails?.relatedPlaylists?.uploads || 'introuvable' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "85d8c0d0-794b-58a0-b932-0af3fda99fe6",
+      "name": "MZ · YT uploads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        300
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "cwYHFUad2DZdTq0k",
+          "name": "YouTube account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/videos",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "snippet,statistics"
+            },
+            {
+              "name": "id",
+              "value": "={{ ($json.items || []).map(i => i.contentDetails.videoId).join(',') || 'aucun' }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        }
+      },
+      "id": "df836f4e-9373-5c4f-989e-c7a81e34f03f",
+      "name": "MZ · YT stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        300
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "cwYHFUad2DZdTq0k",
+          "name": "YouTube account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst n = v => Number(v || 0);\nconst fmt = v => n(v).toLocaleString('fr-FR');\nconst A = 'MZ', LABEL = 'Muz Rappel', PAR_LANGUE = false;\nconst get = x => { try { return $(x).first().json; } catch (err) { return {}; } };\nconst debut = DateTime.now().setZone('Europe/Paris').minus({ days: 7 });\nconst recent = t => t && DateTime.fromISO(String(t)) >= debut;\nconst erreurs = [];\nconst err = (j, quoi) => { if (j && j.error) erreurs.push(`${quoi} : ${e(j.error.message || JSON.stringify(j.error)).slice(0, 120)}`); };\n\n// --- YouTube\nconst ytc = get(`${A} · YT chaîne`), yts = get(`${A} · YT stats`);\nerr(ytc, 'YouTube'); err(yts, 'YouTube stats');\nconst yt = (yts.items || []).filter(v => recent(v.snippet?.publishedAt)).map(v => ({\n  titre: v.snippet.title, vues: n(v.statistics?.viewCount), likes: n(v.statistics?.likeCount), coms: n(v.statistics?.commentCount) }));\n// --- Instagram (vues seulement si instagram_manage_insights est accordée)\nconst igm = get(`${A} · IG médias`), igc = get(`${A} · IG compte`);\nerr(igm, 'Instagram'); err(igc, 'Instagram compte');\nconst vuesIG = {};\ntry { for (const it of $(`${A} · IG vues`).all()) { const d = it.json.data; if (Array.isArray(d)) for (const m of d) if (m.name === 'views') vuesIG[String(m.id).split('/')[0]] = n(m.values?.[0]?.value); } } catch (x) {}\nconst ig = (igm.data || []).filter(m => m.media_product_type === 'REELS' && recent(m.timestamp)).map(m => ({\n  titre: String(m.caption || '').split('\\n')[0].slice(0, 70), likes: n(m.like_count), coms: n(m.comments_count), vues: vuesIG[m.id] }));\n// --- Facebook (vidéos de Reel : permalien /reel/)\nconst fbv = get(`${A} · FB vidéos`), fbp = get(`${A} · FB page`);\nerr(fbv, 'Facebook'); err(fbp, 'Facebook page');\nconst fb = (fbv.data || []).filter(v => /\\/reel\\//.test(v.permalink_url || '') && recent(v.created_time)).map(v => ({\n  titre: v.title || '', vues: n(v.views), likes: n(v.likes?.summary?.total_count), coms: n(v.comments?.summary?.total_count) }));\n\n// --- Abonnés + évolution (staticData : exécutions planifiées uniquement)\nconst abo = { youtube: n(ytc.items?.[0]?.statistics?.subscriberCount), instagram: n(igc.followers_count), facebook: n(fbp.followers_count) };\nconst memo = $getWorkflowStaticData('global');\nconst avant = memo[A] || null;\nmemo[A] = abo;\nconst delta = k => avant ? ` (${abo[k] - avant[k] >= 0 ? '+' : ''}${abo[k] - avant[k]})` : '';\n\nconst somme = (l, k) => l.reduce((s, x) => s + n(x[k]), 0);\nconst lignes = [];\nlignes.push(`📊 <b>${LABEL} — semaine du ${debut.toFormat('dd/MM')} au ${DateTime.now().setZone('Europe/Paris').minus({ days: 1 }).toFormat('dd/MM')}</b>`);\nlignes.push('');\nlignes.push(`▶️ <b>YouTube</b> : ${yt.length} vidéo(s) · ${fmt(somme(yt, 'vues'))} vues · ${fmt(somme(yt, 'likes'))} likes · ${fmt(somme(yt, 'coms'))} com.`);\nconst vIG = ig.some(x => x.vues != null) ? ` · ${fmt(somme(ig, 'vues'))} vues` : '';\nlignes.push(`📸 <b>Instagram</b> : ${ig.length} Reel(s)${vIG} · ${fmt(somme(ig, 'likes'))} likes · ${fmt(somme(ig, 'coms'))} com.`);\nlignes.push(`📘 <b>Facebook</b> : ${fb.length} Reel(s) · ${fmt(somme(fb, 'vues'))} vues · ${fmt(somme(fb, 'likes'))} likes · ${fmt(somme(fb, 'coms'))} com.`);\nlignes.push('');\nlignes.push(`👥 <b>Abonnés</b> : YouTube ${fmt(abo.youtube)}${delta('youtube')} · Instagram ${fmt(abo.instagram)}${delta('instagram')} · Facebook ${fmt(abo.facebook)}${delta('facebook')}`);\nconst top = [...yt].sort((a, b) => b.vues - a.vues).slice(0, 3);\nif (top.length) {\n  lignes.push('', '🏆 <b>Top YouTube</b>');\n  top.forEach((v, i) => lignes.push(`${i + 1}. ${e(v.titre)} — ${fmt(v.vues)} vues, ${fmt(v.likes)} likes`));\n}\nconst topIG = [...ig].sort((a, b) => (b.vues ?? b.likes) - (a.vues ?? a.likes)).slice(0, 3);\nif (topIG.length) {\n  lignes.push('', '🏆 <b>Top Instagram</b>');\n  topIG.forEach((v, i) => lignes.push(`${i + 1}. ${e(v.titre)} — ${v.vues != null ? fmt(v.vues) + ' vues, ' : ''}${fmt(v.likes)} likes`));\n}\nif (PAR_LANGUE && yt.length) {\n  const parL = {};\n  for (const v of yt) {\n    const t = String(v.titre);\n    const duel = t.match(/([A-ZÉÈ][\\p{L}-]+)\\s+(?:vs|VS|contre)\\.?\\s+([A-ZÉÈ][\\p{L}-]+)/u);\n    const m = t.match(/\\ben ([A-ZÉÈ][\\p{L}-]+)/u);\n    const l = duel ? `${duel[1]} vs ${duel[2]}` : m ? m[1] : 'autre';\n    parL[l] = parL[l] || { vues: 0, nb: 0 }; parL[l].vues += v.vues; parL[l].nb += 1;\n  }\n  lignes.push('', '🌍 <b>Vues YouTube par langue</b> (moyenne par vidéo)');\n  Object.entries(parL).sort((a, b) => b[1].vues / b[1].nb - a[1].vues / a[1].nb)\n    .forEach(([l, x]) => lignes.push(`• ${e(l)} : ${fmt(Math.round(x.vues / x.nb))} (${x.nb} vidéo${x.nb > 1 ? 's' : ''})`));\n}\nif (!ig.some(x => x.vues != null)) lignes.push('', '<i>Vues Instagram indisponibles : permission instagram_manage_insights à ajouter au token.</i>');\nif (erreurs.length) lignes.push('', '⚠️ ' + erreurs.join('\\n⚠️ '));\nreturn [{ json: { texte: lignes.join('\\n').slice(0, 4000), chat_id: '6980427615' } }];\n"
+      },
+      "id": "b5fa590d-e092-56af-9875-73c20bcb167b",
+      "name": "MZ · Bilan",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        300
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "45babbf3-dc06-53de-b6b8-b36870fc53e5",
+      "name": "MZ · Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TnA0UuhJFPlr5QZu",
+          "name": "Telegram - muzrappelbot"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "executeOnce": true
+    }
+  ],
+  "connections": {
+    "VB · IG médias": {
+      "main": [
+        [
+          {
+            "node": "VB · IG cibles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · IG cibles": {
+      "main": [
+        [
+          {
+            "node": "VB · IG vues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · IG vues": {
+      "main": [
+        [
+          {
+            "node": "VB · IG compte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · IG compte": {
+      "main": [
+        [
+          {
+            "node": "VB · FB vidéos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · FB vidéos": {
+      "main": [
+        [
+          {
+            "node": "VB · FB page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · FB page": {
+      "main": [
+        [
+          {
+            "node": "VB · YT chaîne",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · YT chaîne": {
+      "main": [
+        [
+          {
+            "node": "VB · YT uploads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · YT uploads": {
+      "main": [
+        [
+          {
+            "node": "VB · YT stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · YT stats": {
+      "main": [
+        [
+          {
+            "node": "VB · Bilan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · Bilan": {
+      "main": [
+        [
+          {
+            "node": "VB · Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Planifié": {
+      "main": [
+        [
+          {
+            "node": "VB · IG médias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test manuel": {
+      "main": [
+        [
+          {
+            "node": "VB · IG médias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · IG médias": {
+      "main": [
+        [
+          {
+            "node": "MZ · IG cibles",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · IG cibles": {
+      "main": [
+        [
+          {
+            "node": "MZ · IG vues",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · IG vues": {
+      "main": [
+        [
+          {
+            "node": "MZ · IG compte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · IG compte": {
+      "main": [
+        [
+          {
+            "node": "MZ · FB vidéos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · FB vidéos": {
+      "main": [
+        [
+          {
+            "node": "MZ · FB page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · FB page": {
+      "main": [
+        [
+          {
+            "node": "MZ · YT chaîne",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · YT chaîne": {
+      "main": [
+        [
+          {
+            "node": "MZ · YT uploads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · YT uploads": {
+      "main": [
+        [
+          {
+            "node": "MZ · YT stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · YT stats": {
+      "main": [
+        [
+          {
+            "node": "MZ · Bilan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MZ · Bilan": {
+      "main": [
+        [
+          {
+            "node": "MZ · Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "VB · Telegram": {
+      "main": [
+        [
+          {
+            "node": "MZ · IG médias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris",
+    "errorWorkflow": "VbErreursAlerte1",
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}

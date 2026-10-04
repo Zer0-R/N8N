@@ -1,0 +1,719 @@
+{
+  "name": "VocaBag - Réponses commentaires",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 3,
+              "triggerAtMinute": 20
+            }
+          ]
+        }
+      },
+      "id": "ca70f31f-63b6-596c-9ce9-8bb9338f9648",
+      "name": "Planifié",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b755ef2f-ef8c-59ae-ac56-998f5647ebf5",
+      "name": "Test manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: {\n  graph: 'https://graph.facebook.com/v23.0',\n  compte_ig: 'vocabag',          // nom d'utilisateur Instagram : ses commentaires / réponses sont ignorés\n  jours: 7,                      // Reels pris en compte (les <folder>_words.json sont purgés à 7 jours)\n  chat_id: '6980427615',\n  simulation: false,             // true : calcule et résume sur Telegram, ne publie rien\n} }];\n"
+      },
+      "id": "2f7bf323-72ad-5bff-9636-1ccad9d94946",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT folder, instagram_media_id, youtube_video_id FROM vocabag_videos WHERE folder >= '{{ $now.setZone('Europe/Paris').minus({ days: $('Config').first().json.jours }).toFormat('yyyyMMdd') }}' ORDER BY folder DESC",
+        "options": {}
+      },
+      "id": "d42af4d8-0b85-5557-a5bb-5cbbdef1a263",
+      "name": "BD · Reels récents",
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        440,
+        100
+      ],
+      "credentials": {
+        "mySql": {
+          "id": "qZ2NnMkubbTE5fNX",
+          "name": "Vocabag DB"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fileSelector": "=/files/vocabag/{{ $json.folder }}_words.json",
+        "options": {
+          "dataPropertyName": "data"
+        }
+      },
+      "id": "8df17a43-23e5-5adb-9098-cf702aeec9ba",
+      "name": "Lire phrases",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "fromJson",
+        "options": {}
+      },
+      "id": "724a1ac3-6e27-5298-801b-c6064276d554",
+      "name": "Phrases",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        880,
+        100
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reels récents → phrases attendues (words.json) ; une sortie par Reel publié sur la plateforme Instagram\nconst phrases = {};\nfor (const it of $('Phrases').all()) {\n  let d = it.json.data ?? it.json;\n  if (Array.isArray(d)) d = d[0];\n  if (d && d.folder && Array.isArray(d.reveals)) phrases[d.folder] = d.reveals;\n}\nconst champ = 'instagram_media_id';\nreturn $('BD · Reels récents').all()\n  .map(r => r.json)\n  .filter(r => r[champ] && phrases[r.folder])\n  .map(r => ({ json: { id: String(r[champ]), folder: r.folder, reveals: phrases[r.folder] } }));\n"
+      },
+      "id": "74173f4f-7674-5eb5-a1f0-a10949b803b4",
+      "name": "Cibles IG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Config').first().json.graph }}/{{ $json.id }}/comments",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "fields",
+              "value": "id,text,username,timestamp,replies{username}"
+            },
+            {
+              "name": "limit",
+              "value": "50"
+            }
+          ]
+        }
+      },
+      "id": "a8961a03-538d-56c5-8918-507d0e298020",
+      "name": "IG · Commentaires",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        0
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// Correcteur des commentaires VocaBag : la personne a-t-elle écrit la phrase (ou le mot) du Reel ?\n// Utilisé par le nœud « Réponses à faire » de « VocaBag - Réponses commentaires » (build_vocabag_reponses.py).\n// candidats(reveals) : textes attendus tirés de <folder>_words.json ; evaluer(texte, cands) → null | {type, cible, score}\n\nfunction normaliser(s) {\n  return String(s || '')\n    .toLowerCase()\n    .normalize('NFD').replace(/\\p{M}/gu, '')            // accents latins + harakat arabes\n    .replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ـ/g, '')\n    .replace(/[ʿʾ'’`´]/g, '')\n    .replace(/[^\\p{L}\\p{N}\\s]/gu, ' ')\n    .replace(/\\s+/g, ' ').trim();\n}\n\nfunction distance(a, b) {               // Levenshtein (mots courts)\n  const m = a.length, n = b.length;\n  if (Math.abs(m - n) > 2) return 3;\n  let prev = Array.from({ length: n + 1 }, (_, j) => j);\n  for (let i = 1; i <= m; i++) {\n    const cur = [i];\n    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));\n    prev = cur;\n  }\n  return prev[n];\n}\n\nconst proche = (a, b) => a === b || (a.length >= 4 && b.length >= 4 && distance(a, b) <= 1);\n\nfunction candidats(reveals) {\n  const out = [];\n  for (const r of reveals || []) {\n    const translit = String(r.answerDisplay || '').split('\\n')[0];\n    const ajout = (texte, type) => {\n      const mots = normaliser(texte).split(' ').filter(Boolean);\n      if (mots.length) out.push({ texte, mots, type, phrase: r.example_sentence, translit,\n                                  traduction: type === 'mot' ? r.translation : r.example_translation });\n    };\n    ajout(r.example_sentence, 'phrase');\n    if (translit && translit !== r.example_sentence) ajout(translit, 'phrase');\n    ajout(r.word, 'mot');\n    if (r.transliteration) ajout(r.transliteration, 'mot');\n  }\n  return out;\n}\n\nfunction evaluer(texte, cands) {\n  const mots = normaliser(texte).split(' ').filter(Boolean);\n  if (!mots.length) return null;\n  const meilleurDe = liste => {\n    let m = null;\n    for (const c of liste) {\n      const trouves = c.mots.filter(x => mots.some(y => proche(y, x))).length;\n      const score = trouves / c.mots.length;\n      if (!m || score > m.score || (score === m.score && c.mots.length > m.cible.mots.length)) m = { score, cible: c };\n    }\n    return m;\n  };\n  // 1) la phrase prime : au moins 40 % de ses mots (phrase de 3 mots ou plus)\n  const p = meilleurDe(cands.filter(c => c.type === 'phrase' && c.mots.length >= 3));\n  if (p && p.score >= 0.4) return { ...p, type: p.score >= 0.85 ? 'bravo' : 'presque' };\n  // 2) sinon un mot du Reel écrit seul (commentaire court, mot exact)\n  if (mots.length <= 3) {\n    const w = meilleurDe(cands.filter(c => c.type === 'mot'));\n    if (w && w.score === 1) return { ...w, type: 'bravo' };\n  }\n  return null;\n}\n\nfunction reponse(ev) {\n  const c = ev.cible;\n  if (ev.type === 'bravo')\n    return c.type === 'mot'\n      ? `Bravo 👏 C’est bien ça : « ${c.texte} »${c.traduction ? ' = ' + c.traduction : ''} 🎉`\n      : `Bravo 👏 C’est exactement ça !${c.traduction ? ' (' + c.traduction + ')' : ''} 🎉`;\n  return `Presque 💪 La phrase exacte : « ${c.phrase} »` + (c.translit && c.translit !== c.phrase ? ` (${c.translit})` : '');\n}\n\n// Commentaires Instagram (une réponse HTTP par Reel, même ordre que « Cibles IG »)\nconst cfg = $('Config').first().json;\nconst cibles = $('Cibles IG').all();\nconst sortie = [];\n$input.all().forEach((it, i) => {\n  const cible = cibles[i]?.json;\n  if (!cible) return;\n  const cands = candidats(cible.reveals);\n  for (const c of (it.json.data || [])) {\n    if (c.username === cfg.compte_ig) continue;\n    if ((c.replies?.data || []).some(r => r.username === cfg.compte_ig)) continue;\n    const ev = evaluer(c.text, cands);\n    if (ev) sortie.push({ json: { plateforme: 'Instagram', comment_id: c.id, auteur: c.username, texte: c.text,\n                                  type: ev.type, replyText: reponse(ev), folder: cible.folder } });\n  }\n});\nreturn sortie;\n"
+      },
+      "id": "8759fdbb-472f-5ae5-9b6b-eff0cb2d3877",
+      "name": "Réponses IG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "e61d8fc9-bdbf-5649-ad8d-170def60fbf7",
+              "leftValue": "={{ !$('Config').first().json.simulation }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c0227d6c-88a1-57ae-96f2-dca4ea00d82c",
+      "name": "Publier IG ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Config').first().json.graph }}/{{ $json.comment_id }}/replies",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "facebookGraphApi",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "message",
+              "value": "={{ $json.replyText }}"
+            }
+          ]
+        }
+      },
+      "id": "ef2b6420-5ae5-548f-a69e-4cced3022f98",
+      "name": "IG · Répondre",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        -100
+      ],
+      "credentials": {
+        "facebookGraphApi": {
+          "id": "RL5TaCOZpmZmBEc8",
+          "name": "Facebook Graph account"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// Résumé Telegram des réponses de la plateforme (publiées ou simulées)\nconst e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst cfg = $('Config').first().json;\nconst faites = $('Réponses IG').all().map(x => x.json);\nconst res = cfg.simulation ? [] : $input.all().map(x => x.json);\nconst lignes = faites.map((r, i) => {\n  const err = res[i] && (res[i].error || (!res[i].id && !cfg.simulation)) ? ' ❌ ' + e(JSON.stringify(res[i].error || res[i]).slice(0, 120)) : '';\n  return `• <b>${e(r.auteur)}</b> : « ${e(String(r.texte).slice(0, 80))} »\\n   → ${e(r.replyText)}${err}`;\n});\nconst titre = `💬 <b>VocaBag — ${faites.length} réponse(s) ${faites[0].plateforme}</b>${cfg.simulation ? ' (simulation, rien publié)' : ''}`;\nreturn [{ json: { texte: (titre + '\\n\\n' + lignes.join('\\n')).slice(0, 4000), chat_id: cfg.chat_id } }];\n"
+      },
+      "id": "f45af158-9a3e-563d-b847-fb947f57f897",
+      "name": "Résumé IG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "d7eeadae-4cf6-50e4-8d42-4df72419c6c7",
+      "name": "Telegram IG",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        0
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Reels récents → phrases attendues (words.json) ; une sortie par Reel publié sur la plateforme YouTube\nconst phrases = {};\nfor (const it of $('Phrases').all()) {\n  let d = it.json.data ?? it.json;\n  if (Array.isArray(d)) d = d[0];\n  if (d && d.folder && Array.isArray(d.reveals)) phrases[d.folder] = d.reveals;\n}\nconst champ = 'youtube_video_id';\nreturn $('BD · Reels récents').all()\n  .map(r => r.json)\n  .filter(r => r[champ] && phrases[r.folder])\n  .map(r => ({ json: { id: String(r[champ]), folder: r.folder, reveals: phrases[r.folder] } }));\n"
+      },
+      "id": "17a97a76-081a-5a1b-9f3c-7a9409d2d4d9",
+      "name": "Cibles YT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/youtube/v3/commentThreads",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "snippet"
+            },
+            {
+              "name": "videoId",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "maxResults",
+              "value": "50"
+            },
+            {
+              "name": "textFormat",
+              "value": "plainText"
+            }
+          ]
+        }
+      },
+      "id": "15dbcc77-df63-57d5-99b8-1d4d15530102",
+      "name": "YT · Commentaires",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        300
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "1KMbY9e6VCrfiKfu",
+          "name": "YouTube account 3"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// Correcteur des commentaires VocaBag : la personne a-t-elle écrit la phrase (ou le mot) du Reel ?\n// Utilisé par le nœud « Réponses à faire » de « VocaBag - Réponses commentaires » (build_vocabag_reponses.py).\n// candidats(reveals) : textes attendus tirés de <folder>_words.json ; evaluer(texte, cands) → null | {type, cible, score}\n\nfunction normaliser(s) {\n  return String(s || '')\n    .toLowerCase()\n    .normalize('NFD').replace(/\\p{M}/gu, '')            // accents latins + harakat arabes\n    .replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/ـ/g, '')\n    .replace(/[ʿʾ'’`´]/g, '')\n    .replace(/[^\\p{L}\\p{N}\\s]/gu, ' ')\n    .replace(/\\s+/g, ' ').trim();\n}\n\nfunction distance(a, b) {               // Levenshtein (mots courts)\n  const m = a.length, n = b.length;\n  if (Math.abs(m - n) > 2) return 3;\n  let prev = Array.from({ length: n + 1 }, (_, j) => j);\n  for (let i = 1; i <= m; i++) {\n    const cur = [i];\n    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));\n    prev = cur;\n  }\n  return prev[n];\n}\n\nconst proche = (a, b) => a === b || (a.length >= 4 && b.length >= 4 && distance(a, b) <= 1);\n\nfunction candidats(reveals) {\n  const out = [];\n  for (const r of reveals || []) {\n    const translit = String(r.answerDisplay || '').split('\\n')[0];\n    const ajout = (texte, type) => {\n      const mots = normaliser(texte).split(' ').filter(Boolean);\n      if (mots.length) out.push({ texte, mots, type, phrase: r.example_sentence, translit,\n                                  traduction: type === 'mot' ? r.translation : r.example_translation });\n    };\n    ajout(r.example_sentence, 'phrase');\n    if (translit && translit !== r.example_sentence) ajout(translit, 'phrase');\n    ajout(r.word, 'mot');\n    if (r.transliteration) ajout(r.transliteration, 'mot');\n  }\n  return out;\n}\n\nfunction evaluer(texte, cands) {\n  const mots = normaliser(texte).split(' ').filter(Boolean);\n  if (!mots.length) return null;\n  const meilleurDe = liste => {\n    let m = null;\n    for (const c of liste) {\n      const trouves = c.mots.filter(x => mots.some(y => proche(y, x))).length;\n      const score = trouves / c.mots.length;\n      if (!m || score > m.score || (score === m.score && c.mots.length > m.cible.mots.length)) m = { score, cible: c };\n    }\n    return m;\n  };\n  // 1) la phrase prime : au moins 40 % de ses mots (phrase de 3 mots ou plus)\n  const p = meilleurDe(cands.filter(c => c.type === 'phrase' && c.mots.length >= 3));\n  if (p && p.score >= 0.4) return { ...p, type: p.score >= 0.85 ? 'bravo' : 'presque' };\n  // 2) sinon un mot du Reel écrit seul (commentaire court, mot exact)\n  if (mots.length <= 3) {\n    const w = meilleurDe(cands.filter(c => c.type === 'mot'));\n    if (w && w.score === 1) return { ...w, type: 'bravo' };\n  }\n  return null;\n}\n\nfunction reponse(ev) {\n  const c = ev.cible;\n  if (ev.type === 'bravo')\n    return c.type === 'mot'\n      ? `Bravo 👏 C’est bien ça : « ${c.texte} »${c.traduction ? ' = ' + c.traduction : ''} 🎉`\n      : `Bravo 👏 C’est exactement ça !${c.traduction ? ' (' + c.traduction + ')' : ''} 🎉`;\n  return `Presque 💪 La phrase exacte : « ${c.phrase} »` + (c.translit && c.translit !== c.phrase ? ` (${c.translit})` : '');\n}\n\n// Fils de commentaires YouTube (une réponse HTTP par vidéo, même ordre que « Cibles YT »)\nconst cibles = $('Cibles YT').all();\nconst sortie = [];\n$input.all().forEach((it, i) => {\n  const cible = cibles[i]?.json;\n  if (!cible) return;\n  const cands = candidats(cible.reveals);\n  for (const t of (it.json.items || [])) {\n    const s = t.snippet || {};\n    const top = s.topLevelComment?.snippet || {};\n    if (s.totalReplyCount > 0) continue;                               // déjà une réponse\n    if (top.authorChannelId?.value && top.authorChannelId.value === s.channelId) continue;   // notre chaîne\n    const ev = evaluer(top.textOriginal || top.textDisplay, cands);\n    if (ev) sortie.push({ json: { plateforme: 'YouTube', comment_id: s.topLevelComment.id, auteur: top.authorDisplayName,\n                                  texte: top.textOriginal || top.textDisplay, type: ev.type, replyText: reponse(ev),\n                                  folder: cible.folder } });\n  }\n});\nreturn sortie;\n"
+      },
+      "id": "0f1673ba-f80d-5e33-8000-dfadd118d428",
+      "name": "Réponses YT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "95f88f3b-fbfd-5de6-94d6-d6be5216f0c6",
+              "leftValue": "={{ !$('Config').first().json.simulation }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8d3820ec-04a3-5a28-8dae-6f8315eda98c",
+      "name": "Publier YT ?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.googleapis.com/youtube/v3/comments",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "youTubeOAuth2Api",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 60000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "part",
+              "value": "snippet"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "snippet.parentId",
+              "value": "={{ $json.comment_id }}"
+            },
+            {
+              "name": "snippet.textOriginal",
+              "value": "={{ $json.replyText }}"
+            }
+          ]
+        }
+      },
+      "id": "8a8ea796-367e-506f-9b2f-cb71405d0bad",
+      "name": "YT · Répondre",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1980,
+        200
+      ],
+      "credentials": {
+        "youTubeOAuth2Api": {
+          "id": "1KMbY9e6VCrfiKfu",
+          "name": "YouTube account 3"
+        }
+      },
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// Résumé Telegram des réponses de la plateforme (publiées ou simulées)\nconst e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst cfg = $('Config').first().json;\nconst faites = $('Réponses YT').all().map(x => x.json);\nconst res = cfg.simulation ? [] : $input.all().map(x => x.json);\nconst lignes = faites.map((r, i) => {\n  const err = res[i] && (res[i].error || (!res[i].id && !cfg.simulation)) ? ' ❌ ' + e(JSON.stringify(res[i].error || res[i]).slice(0, 120)) : '';\n  return `• <b>${e(r.auteur)}</b> : « ${e(String(r.texte).slice(0, 80))} »\\n   → ${e(r.replyText)}${err}`;\n});\nconst titre = `💬 <b>VocaBag — ${faites.length} réponse(s) ${faites[0].plateforme}</b>${cfg.simulation ? ' (simulation, rien publié)' : ''}`;\nreturn [{ json: { texte: (titre + '\\n\\n' + lignes.join('\\n')).slice(0, 4000), chat_id: cfg.chat_id } }];\n"
+      },
+      "id": "96077471-0db7-5ec4-b323-be58b1fdd15f",
+      "name": "Résumé YT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texte }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML",
+          "disable_web_page_preview": true
+        }
+      },
+      "id": "3c2e8e11-9a17-5199-95fe-a56d2dcee272",
+      "name": "Telegram YT",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2420,
+        300
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "TgVocabagBot0001",
+          "name": "Telegram - vocabagbot"
+        }
+      },
+      "onError": "continueRegularOutput"
+    }
+  ],
+  "connections": {
+    "Planifié": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test manuel": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "BD · Reels récents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BD · Reels récents": {
+      "main": [
+        [
+          {
+            "node": "Lire phrases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lire phrases": {
+      "main": [
+        [
+          {
+            "node": "Phrases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Phrases": {
+      "main": [
+        [
+          {
+            "node": "Cibles IG",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Cibles YT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cibles IG": {
+      "main": [
+        [
+          {
+            "node": "IG · Commentaires",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Commentaires": {
+      "main": [
+        [
+          {
+            "node": "Réponses IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Réponses IG": {
+      "main": [
+        [
+          {
+            "node": "Publier IG ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publier IG ?": {
+      "main": [
+        [
+          {
+            "node": "IG · Répondre",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Résumé IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IG · Répondre": {
+      "main": [
+        [
+          {
+            "node": "Résumé IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Résumé IG": {
+      "main": [
+        [
+          {
+            "node": "Telegram IG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cibles YT": {
+      "main": [
+        [
+          {
+            "node": "YT · Commentaires",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YT · Commentaires": {
+      "main": [
+        [
+          {
+            "node": "Réponses YT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Réponses YT": {
+      "main": [
+        [
+          {
+            "node": "Publier YT ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publier YT ?": {
+      "main": [
+        [
+          {
+            "node": "YT · Répondre",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Résumé YT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "YT · Répondre": {
+      "main": [
+        [
+          {
+            "node": "Résumé YT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Résumé YT": {
+      "main": [
+        [
+          {
+            "node": "Telegram YT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Europe/Paris",
+    "errorWorkflow": "VbErreursAlerte1",
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}
