@@ -50,6 +50,6 @@ Régénération : business.facebook.com/settings/system-users → n8n → Géné
   Tests : `node social/setup/test_vocabag_correcteur.js` (30 cas, dont les exemples des revues ; phrases intégrées, sans dépendance à channels/).
 - **Rattrapage** : si la fiche contient un ID, l'objet est lu directement (`R · IG objet` / `R · FB objet`, `GET /{id}`) :
   en ligne (Instagram trouvé ; Facebook `ready`/`processing`) → ℹ️, pas de republication ; absent (Meta : code 100 /
-  « does not exist », ou vidéo FB dans un autre état : error, expired…) → republication ; inconnu (débit, 5xx, délai) →
+  « does not exist », ou vidéo FB `error` / `expired`) → republication ; inconnu (débit, 5xx, délai, état FB imprévu) →
   ⚠️, pas de republication, nouvel essai à la vérification suivante (4e et 5e revues) ;
   après un rattrapage, la fiche du jour est réécrite avec les nouveaux ID (`R · Fiche à jour`) → pas de doublon le soir.

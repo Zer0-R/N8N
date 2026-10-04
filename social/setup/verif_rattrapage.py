@@ -23,7 +23,7 @@ fiche = fiche.data ?? fiche;
 if (Array.isArray(fiche)) fiche = fiche[0] || {};
 const media = lire('R · Héberger');
 // Anti-doublon : publication du jour encore en cours (< 1 h), ou ID de la fiche lu directement (GET /{id}) :
-//   en_ligne → pas de republication ; absent (Meta : objet inexistant, ou vidéo FB ni ready ni processing) → republication ;
+//   en_ligne → pas de republication ; absent (Meta : objet inexistant, ou vidéo FB error / expired) → republication ;
 //   inconnu (débit, 5xx, délai…) → pas de republication, avertissement (nouvel essai à la vérification suivante).
 const minutes = t => t ? (Date.now() - Date.parse(t)) / 60000 : Infinity;
 const ageMin = minutes(fiche.ecrit_a);
@@ -34,7 +34,8 @@ const etat = (id, obj, fb) => {
   if (!obj || !obj.id) return 'inconnu';
   if (!fb) return 'en_ligne';
   const vs = obj.status?.video_status;
-  return vs === 'ready' || vs === 'processing' ? 'en_ligne' : vs ? 'absent' : 'inconnu';
+  // états connus seulement : un état imprévu (upload_complete, nouveau statut Meta…) ne doit jamais provoquer de doublon
+  return vs === 'ready' || vs === 'processing' ? 'en_ligne' : vs === 'error' || vs === 'expired' ? 'absent' : 'inconnu';
 };
 const objIG = lire('R · IG objet'), objFB = lire('R · FB objet');
 const etats = { instagram: etat(fiche.instagram_id, objIG, false), facebook: etat(fiche.facebook_id, objFB, true) };
