@@ -22,8 +22,14 @@ let fiche = lire('R · Fiche');
 fiche = fiche.data ?? fiche;
 if (Array.isArray(fiche)) fiche = fiche[0] || {};
 const media = lire('R · Héberger');
+// Anti-doublon : publication du jour encore en cours (< 1 h), ou plateforme déjà publiée d'après la fiche
+const ageMin = fiche.ecrit_a ? (Date.now() - Date.parse(fiche.ecrit_a)) / 60000 : Infinity;
+const instagram = ev.rat.instagram >= 0 && !fiche.instagram_id;
+const facebook = ev.rat.facebook >= 0 && !fiche.facebook_id;
 let raison = '';
 if (!fiche || !fiche.video_path) raison = 'fiche du jour introuvable (_publications/' + $now.setZone('Europe/Paris').toISODate() + '.json)';
+else if (fiche.statut === 'en_cours' && ageMin < 60) raison = `publication du jour encore en cours (lancée il y a ${Math.round(ageMin)} min) — pas de rattrapage pour éviter un doublon`;
+else if (!instagram && !facebook) raison = `déjà publié d'après la fiche (Instagram ${fiche.instagram_id || '—'}, Facebook ${fiche.facebook_id || '—'}) : pas encore visible dans l'API ?`;
 else if (!media.url) raison = 'vidéo non hébergée : ' + String(media.error || media.message || 'fichier ' + fiche.video_path + ' illisible').slice(0, 200);
 return [{ json: {
   publier: !raison, raison,
@@ -31,7 +37,7 @@ return [{ json: {
   video_url: media.url || '',
   caption: fiche.caption, fb_title: fiche.fb_title, fb_description: fiche.fb_description,
   share_to_feed: fiche.share_to_feed,
-  instagram: ev.rat.instagram >= 0, facebook: ev.rat.facebook >= 0,
+  instagram, facebook,
   alerter: false,
   contexte: 'Rattrapage automatique — ' + (fiche.folder || ''),
 } }];

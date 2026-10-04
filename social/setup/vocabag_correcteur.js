@@ -12,6 +12,18 @@ function normaliser(s) {
     .replace(/\s+/g, ' ').trim();
 }
 
+// Chinois / japonais : pas d'espaces → un caractère = un mot. Ailleurs : mots de 3 lettres ou plus
+// (« la », « de », « mi », « في »… ne suffisent pas à reconnaître une phrase).
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u;
+function mots(s) {
+  const out = [];
+  for (const m of normaliser(s).split(' ').filter(Boolean)) {
+    if (CJK.test(m)) out.push(...[...m].filter(c => CJK.test(c)));
+    else if ([...m].length >= 3) out.push(m);
+  }
+  return out;
+}
+
 function distance(a, b) {               // Levenshtein (mots courts)
   const m = a.length, n = b.length;
   if (Math.abs(m - n) > 2) return 3;
@@ -31,8 +43,9 @@ function candidats(reveals) {
   for (const r of reveals || []) {
     const translit = String(r.answerDisplay || '').split('\n')[0];
     const ajout = (texte, type) => {
-      const mots = normaliser(texte).split(' ').filter(Boolean);
-      if (mots.length) out.push({ texte, mots, type, phrase: r.example_sentence, translit,
+      const m = type === 'mot' ? normaliser(texte).split(' ').filter(Boolean) : mots(texte);
+      const tous = type === 'mot' ? m : normaliser(texte).split(' ').filter(Boolean).flatMap(x => CJK.test(x) ? [...x].filter(c => CJK.test(c)) : [x]);
+      if (m.length) out.push({ texte, mots: m, tous, type, phrase: r.example_sentence, translit,
                                   traduction: type === 'mot' ? r.translation : r.example_translation });
     };
     ajout(r.example_sentence, 'phrase');
@@ -44,23 +57,27 @@ function candidats(reveals) {
 }
 
 function evaluer(texte, cands) {
-  const mots = normaliser(texte).split(' ').filter(Boolean);
-  if (!mots.length) return null;
-  const meilleurDe = liste => {
+  const significatifs = mots(texte);
+  const brut = normaliser(texte).split(' ').filter(Boolean);
+  if (!brut.length) return null;
+  const meilleurDe = (liste, motsCommentaire) => {
     let m = null;
     for (const c of liste) {
-      const trouves = c.mots.filter(x => mots.some(y => proche(y, x))).length;
+      const trouves = c.mots.filter(x => motsCommentaire.some(y => proche(y, x))).length;
       const score = trouves / c.mots.length;
-      if (!m || score > m.score || (score === m.score && c.mots.length > m.cible.mots.length)) m = { score, cible: c };
+      if (!m || score > m.score || (score === m.score && c.mots.length > m.cible.mots.length)) m = { score, trouves, cible: c };
     }
     return m;
   };
-  // 1) la phrase prime : au moins 40 % de ses mots (phrase de 3 mots ou plus)
-  const p = meilleurDe(cands.filter(c => c.type === 'phrase' && c.mots.length >= 3));
-  if (p && p.score >= 0.4) return { ...p, type: p.score >= 0.85 ? 'bravo' : 'presque' };
+  // 1) la phrase prime : ≥ 85 % des mots significatifs → bravo ; ≥ 50 % et au moins 2 mots → presque
+  const p = meilleurDe(cands.filter(c => c.type === 'phrase' && c.mots.length >= 2), significatifs);
+  // « Bravo » : il faut aussi les petits mots (« is », « de »…), sinon c'est « Presque »
+  const complet = c => c.tous.filter(x => brut.some(y => proche(y, x) || y.includes(x))).length / c.tous.length;
+  if (p && p.score >= 0.85 && complet(p.cible) >= 0.85) return { ...p, type: 'bravo' };
+  if (p && ((p.score >= 0.5 && p.trouves >= 2) || p.score >= 0.85)) return { ...p, type: 'presque' };
   // 2) sinon un mot du Reel écrit seul (commentaire court, mot exact)
-  if (mots.length <= 3) {
-    const w = meilleurDe(cands.filter(c => c.type === 'mot'));
+  if (brut.length <= 3) {
+    const w = meilleurDe(cands.filter(c => c.type === 'mot'), brut.flatMap(x => CJK.test(x) ? [x, ...[...x]] : [x]));
     if (w && w.score === 1) return { ...w, type: 'bravo' };
   }
   return null;
@@ -75,4 +92,4 @@ function reponse(ev) {
   return `Presque 💪 La phrase exacte : « ${c.phrase} »` + (c.translit && c.translit !== c.phrase ? ` (${c.translit})` : '');
 }
 
-if (typeof module !== 'undefined') module.exports = { normaliser, candidats, evaluer, reponse };
+if (typeof module !== 'undefined') module.exports = { normaliser, mots, candidats, evaluer, reponse };

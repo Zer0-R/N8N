@@ -10,7 +10,8 @@ Remplace les nœuds « Publish » (nœud communautaire Instagram) et « Publish 
                                │       └─► Facebook publié ?  ($json.facebook_id)  → Marquer … Facebook
                                └─► Fiche publication → Fiche en fichier → Écrire fiche
 La fiche du jour (_publications/AAAA-MM-JJ.json : légende, titres, chemin de la vidéo, dossier, id en base) sert
-au rattrapage automatique des workflows « … - Vérification ».
+au rattrapage automatique des workflows « … - Vérification ». Elle est écrite « en_cours » avant la publication puis
+réécrite « termine » (avec instagram_id / facebook_id) après — `fiche_statut()`, idempotent.
 """
 import json
 import sys
@@ -56,10 +57,18 @@ return [{ json: {
 """,
 }
 FICHE_JS = r"""
-// Fiche du jour pour le rattrapage (sans l'URL RVM, qui expire au bout de 2 h)
+// Fiche du jour pour le rattrapage (sans l'URL RVM, qui expire au bout de 2 h).
+// statut « en_cours » : la vérification ne rattrape pas une publication en cours (< 1 h) → pas de doublon.
 const p = { ...$('Préparer publication').first().json };
 delete p.video_url;
-return [{ json: p }];
+return [{ json: { ...p, statut: 'en_cours', ecrit_a: new Date().toISOString() } }];
+"""
+FICHE_FIN_JS = r"""
+// Publication terminée : fiche réécrite avec le résultat (le rattrapage ne republie pas une plateforme déjà publiée)
+const r = $input.first().json;
+return [{ json: { ...$('Fiche publication').first().json, statut: 'termine', termine_a: new Date().toISOString(),
+                  instagram_id: r.instagram_id || '', facebook_id: r.facebook_id || '',
+                  erreur: r.error ? String(r.error.message || r.error).slice(0, 300) : '' } }];
 """
 SOURCE = {'vocabag': 'Preparer metadata YouTube', 'muz': 'Code in JavaScript1'}
 DOSSIER = {'vocabag': '/files/vocabag/_publications', 'muz': '/files/muzrappel/_publications'}
@@ -135,8 +144,42 @@ def patch(w, cle):
     return w
 
 
+def fiche_statut(w, cle):
+    """Fiche « en_cours » avant la publication, « termine » après (idempotent, 2026-10-04)."""
+    noms = {n['name'] for n in w['nodes']}
+    for n in w['nodes']:
+        if n['name'] == 'Fiche publication':
+            n['parameters']['jsCode'] = FICHE_JS.strip() + '\n'
+    if 'Fiche terminée' in noms:
+        return w
+    x, y = next(n for n in w['nodes'] if n['name'] == 'Publier Reel (IG + FB)')['position']
+    ns = f'video-publication-{cle}/'
+
+    def node(name, type_, version, params, pos, **extra):
+        d = {'parameters': params, 'id': str(uuid.uuid5(uuid.NAMESPACE_URL, ns + name)), 'name': name,
+             'type': type_, 'typeVersion': version, 'position': pos}
+        d.update(extra)
+        return d
+
+    w['nodes'] += [
+        node('Fiche terminée', 'n8n-nodes-base.code', 2, {'jsCode': FICHE_FIN_JS.strip() + '\n'}, [x + 220, y + 200],
+             onError='continueRegularOutput'),
+        node('Fiche terminée en fichier', 'n8n-nodes-base.convertToFile', 1.1,
+             {'operation': 'toJson', 'mode': 'each', 'binaryPropertyName': 'data_json', 'options': {}}, [x + 440, y + 200],
+             onError='continueRegularOutput'),
+        node('Écrire fiche terminée', 'n8n-nodes-base.readWriteFile', 1.1,
+             {'operation': 'write', 'fileName': f"={DOSSIER[cle]}/{{{{ $('Préparer publication').first().json.date }}}}.json",
+              'dataPropertyName': 'data_json', 'options': {}}, [x + 660, y + 200], onError='continueRegularOutput'),
+    ]
+    c = w['connections']
+    c['Publier Reel (IG + FB)']['main'][0].append({'node': 'Fiche terminée', 'type': 'main', 'index': 0})
+    c['Fiche terminée'] = {'main': [[{'node': 'Fiche terminée en fichier', 'type': 'main', 'index': 0}]]}
+    c['Fiche terminée en fichier'] = {'main': [[{'node': 'Écrire fiche terminée', 'type': 'main', 'index': 0}]]}
+    return w
+
+
 if __name__ == '__main__':
     src, cle, out = sys.argv[1:4]
-    w = patch(json.load(open(src)), cle)
+    w = fiche_statut(patch(json.load(open(src)), cle), cle)
     json.dump(w, open(out, 'w'), ensure_ascii=False, indent=1)
     print(out, len(w['nodes']), 'nœuds')

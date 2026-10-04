@@ -61,11 +61,16 @@ const fb = (fbv.data || []).filter(v => /\/reel\//.test(v.permalink_url || '') &
   titre: v.title || '', vues: n(v.views), likes: n(v.likes?.summary?.total_count), coms: n(v.comments?.summary?.total_count) }));
 
 // --- Abonnés + évolution (staticData : exécutions planifiées uniquement)
-const abo = { youtube: n(ytc.items?.[0]?.statistics?.subscriberCount), instagram: n(igc.followers_count), facebook: n(fbp.followers_count) };
+// Une valeur n'est retenue (et mémorisée) que si l'appel a réussi : un échec ne doit pas compter 0 abonné.
+const lu = v => (v === undefined || v === null || v === '') ? null : n(v);
+const abo = { youtube: ytc.error ? null : lu(ytc.items?.[0]?.statistics?.subscriberCount),
+              instagram: igc.error ? null : lu(igc.followers_count),
+              facebook: fbp.error ? null : lu(fbp.followers_count) };
 const memo = $getWorkflowStaticData('global');
-const avant = memo[A] || null;
-memo[A] = abo;
-const delta = k => avant ? ` (${abo[k] - avant[k] >= 0 ? '+' : ''}${abo[k] - avant[k]})` : '';
+const avant = memo[A] || {};
+memo[A] = { ...avant, ...Object.fromEntries(Object.entries(abo).filter(([, v]) => v !== null)) };
+const delta = k => (abo[k] !== null && avant[k] != null) ? ` (${abo[k] - avant[k] >= 0 ? '+' : ''}${abo[k] - avant[k]})` : '';
+const nb = k => abo[k] === null ? '?' : fmt(abo[k]);
 
 const somme = (l, k) => l.reduce((s, x) => s + n(x[k]), 0);
 const lignes = [];
@@ -76,7 +81,7 @@ const vIG = ig.some(x => x.vues != null) ? ` · ${fmt(somme(ig, 'vues'))} vues` 
 lignes.push(`📸 <b>Instagram</b> : ${ig.length} Reel(s)${vIG} · ${fmt(somme(ig, 'likes'))} likes · ${fmt(somme(ig, 'coms'))} com.`);
 lignes.push(`📘 <b>Facebook</b> : ${fb.length} Reel(s) · ${fmt(somme(fb, 'vues'))} vues · ${fmt(somme(fb, 'likes'))} likes · ${fmt(somme(fb, 'coms'))} com.`);
 lignes.push('');
-lignes.push(`👥 <b>Abonnés</b> : YouTube ${fmt(abo.youtube)}${delta('youtube')} · Instagram ${fmt(abo.instagram)}${delta('instagram')} · Facebook ${fmt(abo.facebook)}${delta('facebook')}`);
+lignes.push(`👥 <b>Abonnés</b> : YouTube ${nb('youtube')}${delta('youtube')} · Instagram ${nb('instagram')}${delta('instagram')} · Facebook ${nb('facebook')}${delta('facebook')}`);
 const top = [...yt].sort((a, b) => b.vues - a.vues).slice(0, 3);
 if (top.length) {
   lignes.push('', '🏆 <b>Top YouTube</b>');

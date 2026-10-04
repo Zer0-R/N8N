@@ -34,3 +34,11 @@ instagram_manage_comments, instagram_manage_insights (+ instagram_manage_content
 (type PAGE, sans expiration) → credentials « Instagram account » / « Facebook Graph account » (VocaBag) et « … 2 » (Muz Rappel).
 Vues Instagram désormais dans le bilan hebdo ; réponses Facebook de Muzrappel Commenter autorisées.
 Régénération : business.facebook.com/settings/system-users → n8n → Générer un nouveau token (mêmes permissions).
+
+## Corrections après revue de code (2026-10-04)
+- **Correcteur VocaBag** : seuls les mots de 3 lettres ou plus servent à reconnaître une phrase (« la », « de », « mi »
+  ne suffisent plus) ; « Presque » = ≥ 50 % des mots significatifs dont au moins 2 ; « Bravo » exige aussi les petits mots ;
+  chinois / japonais comparés caractère par caractère. 21 cas de test (`node` + vocabag_correcteur.js).
+- **Rattrapage sans doublon** : fiche du jour « en_cours » avant publication puis « termine » (+ instagram_id / facebook_id).
+  Le rattrapage n'agit pas si une publication est en cours depuis moins d'1 h, ni sur une plateforme déjà publiée selon la fiche.
+- **Bilan hebdo** : un compteur d'abonnés n'est mémorisé que si son appel API a réussi (« ? » sinon, base conservée).
