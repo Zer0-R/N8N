@@ -30,7 +30,7 @@ return [{ json: {
   video_url: $('Poll video soundtrack').last().json.download_url,
   caption: leg.first().json.caption,
   fb_title: meta.title,
-  fb_description: meta.description,
+  fb_description: meta.description.replace('utm_source=youtube&utm_medium=video', 'utm_source=facebook&utm_medium=video'),
   share_to_feed: false,                       // Reels uniquement (2026-09-27)
   contexte: `Vocabag Video — ${folder}`,
   date: $now.setZone('Europe/Paris').toISODate(),

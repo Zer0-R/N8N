@@ -968,3 +968,11 @@ rien n'a été publié sur Instagram/Facebook sans aucune alerte.
   URL publique) → sous-workflow (alerter=false) → UPDATE du suivi → message « 🔁 … republié automatiquement » ou raison de l'échec.
   YouTube manquant : alerte seulement. Chaîne testée de bout en bout le 2026-10-04 (publication simulée).
 - Sauvegardes avant modification : `/root/n8n-backup-ig-via-fb-20261004/*_avant_meta_reel.json`.
+
+## Liens suivis (UTM) vers vocabag.com (2026-10-04)
+- Description YouTube (« Preparer metadata YouTube ») : `https://vocabag.com/?utm_source=youtube&utm_medium=video&utm_campaign=reel&utm_content=<folder>`.
+- Description Facebook : même lien avec `utm_source=facebook` (remplacement dans « Préparer publication »).
+- Commentaire posté sous la vidéo YouTube (« Commenter YouTube ») : `utm_source=youtube&utm_medium=commentaire&utm_campaign=reel`.
+- Instagram : liens non cliquables dans les légendes → mettre en bio `https://vocabag.com/?utm_source=instagram&utm_medium=bio` (manuel).
+- Les `utm_*` passent la liste blanche `_vbUrlPropre` (head.php) : visibles dans PostHog (`properties.utm_source`, `utm_content` = Reel d'origine) et GA.
+- Constat PostHog 28/09-04/10 qui a motivé l'ajout : 0 visiteur venu d'Instagram ou de YouTube.
