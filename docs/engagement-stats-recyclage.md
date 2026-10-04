@@ -26,6 +26,11 @@ phrases, fenêtre 40-59 s car la voix est mêlée à la musique ; bandeau « vid
 ## Facebook
 La story « Reel du jour » existe déjà sur Facebook dans les deux workflows de stories (VocaBag 16h, Muz 9h).
 
-## Permissions à ajouter au prochain token (Graph API Explorer, app Favima3)
-`instagram_manage_insights` (vues Instagram), `read_insights` (stats vidéo Facebook détaillées),
-`pages_manage_engagement` (réponses en tant que page Facebook) — puis `me/accounts` et mise à jour des 4 credentials.
+## Tokens Meta — utilisateur système (2026-10-04)
+Utilisateur système Business Manager « n8n » (app Favima3) : token SYSTEM_USER sans expiration, indépendant de la session
+Facebook personnelle (un changement de mot de passe ne le révoque plus). Permissions : pages_show_list, pages_read_engagement,
+pages_manage_posts, pages_manage_engagement, read_insights, business_management, instagram_basic, instagram_content_publish,
+instagram_manage_comments, instagram_manage_insights (+ instagram_manage_contents). Tokens de page tirés de `me/accounts`
+(type PAGE, sans expiration) → credentials « Instagram account » / « Facebook Graph account » (VocaBag) et « … 2 » (Muz Rappel).
+Vues Instagram désormais dans le bilan hebdo ; réponses Facebook de Muzrappel Commenter autorisées.
+Régénération : business.facebook.com/settings/system-users → n8n → Générer un nouveau token (mêmes permissions).
