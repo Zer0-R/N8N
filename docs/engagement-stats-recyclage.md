@@ -42,3 +42,11 @@ Régénération : business.facebook.com/settings/system-users → n8n → Géné
 - **Rattrapage sans doublon** : fiche du jour « en_cours » avant publication puis « termine » (+ instagram_id / facebook_id).
   Le rattrapage n'agit pas si une publication est en cours depuis moins d'1 h, ni sur une plateforme déjà publiée selon la fiche.
 - **Bilan hebdo** : un compteur d'abonnés n'est mémorisé que si son appel API a réussi (« ? » sinon, base conservée).
+
+## Corrections après la 2e revue (2026-10-04)
+- **Correcteur** : mots entiers uniquement (plus de « a » trouvé dans « chats ») ; phrase reconnue dès 3 mots ;
+  « Bravo » ≥ 85 % de la phrase complète et des mots significatifs, « Presque » ≥ 50 % avec 2 mots communs dont 1 significatif ;
+  chinois / japonais : un mot seul n'est validé que si le commentaire est exactement ce mot (« 我不好意思 » ne valide plus « 好 »).
+  Tests : `cd social/setup && node test_vocabag_correcteur.js` (30 cas, dont les exemples des deux revues).
+- **Rattrapage** : plateforme sautée car déjà publiée d'après la fiche → ligne ℹ️ (pas comptée comme problème) ;
+  après un rattrapage, la fiche du jour est réécrite avec les nouveaux ID (`R · Fiche à jour`) → pas de doublon le soir.

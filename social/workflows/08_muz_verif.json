@@ -682,7 +682,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Réécrit le bilan de « Évaluer » avec le résultat du rattrapage.\nconst e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst ev = $('Évaluer').first().json;\nconst lire = n => { try { return $(n).first().json; } catch (x) { return null; } };\nconst prep = lire('R · Préparer') || { raison: 'rattrapage non lancé' };\nconst res = lire('R · Publier') || {};\nconst pb = [...ev.pb];\nconst maj = (idx, nom, id, err) => {\n  if (idx < 0) return;\n  if (id) pb[idx] = `🔁 ${nom} : Reel manquant, republié automatiquement (${e(id)})`;\n  else pb[idx] += ` — rattrapage échoué : ${e(prep.raison || err || res.error?.message || 'erreur inconnue')}`;\n};\nmaj(ev.rat.instagram, 'Instagram', res.instagram_id, res.instagram_erreur);\nmaj(ev.rat.facebook, 'Facebook', res.facebook_id, res.facebook_erreur);\nconst vrais = pb.filter(x => !x.startsWith('🔁'));\nconst titre = vrais.length ? `🚨 <b>${ev.label} — ${vrais.length} problème(s)</b>` : `🔁 <b>${ev.label} — Reel rattrapé</b>`;\nconst texte = `${titre} (${ev.entete})\\n\\n` + [...pb, ...(ev.test ? ev.ok.map(x => '✔️ ' + x) : [])].join('\\n');\nreturn [{ json: { envoyer: true, problemes: vrais.length, texte: texte.slice(0, 4000), chat_id: ev.chat_id } }];\n"
+        "jsCode": "// Réécrit le bilan de « Évaluer » avec le résultat du rattrapage.\nconst e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');\nconst ev = $('Évaluer').first().json;\nconst lire = n => { try { return $(n).first().json; } catch (x) { return null; } };\nconst prep = lire('R · Préparer') || { raison: 'rattrapage non lancé' };\nconst res = lire('R · Publier') || {};\nconst pb = [...ev.pb];\nconst fiche = prep.fiche || {};\nconst maj = (idx, nom, cle) => {\n  if (idx < 0) return;\n  const idFiche = fiche[cle + '_id'];\n  if (idFiche && prep[cle] === false && !/encore en cours/.test(prep.raison || ''))\n    pb[idx] = `ℹ️ ${nom} : déjà publié d'après la fiche du jour (${e(idFiche)}), pas encore visible dans l'API — pas de republication`;\n  else if (res[cle + '_id']) pb[idx] = `🔁 ${nom} : Reel manquant, republié automatiquement (${e(res[cle + '_id'])})`;\n  else pb[idx] += ` — rattrapage échoué : ${e(prep.raison || res[cle + '_erreur'] || res.error?.message || 'erreur inconnue')}`;\n};\nmaj(ev.rat.instagram, 'Instagram', 'instagram');\nmaj(ev.rat.facebook, 'Facebook', 'facebook');\nconst vrais = pb.filter(x => !x.startsWith('🔁') && !x.startsWith('ℹ️'));\nconst titre = vrais.length ? `🚨 <b>${ev.label} — ${vrais.length} problème(s)</b>`\n  : pb.some(x => x.startsWith('🔁')) ? `🔁 <b>${ev.label} — Reel rattrapé</b>` : `ℹ️ <b>${ev.label} — rien à rattraper</b>`;\nconst texte = `${titre} (${ev.entete})\\n\\n` + [...pb, ...(ev.test ? ev.ok.map(x => '✔️ ' + x) : [])].join('\\n');\nreturn [{ json: { envoyer: true, problemes: vrais.length, texte: texte.slice(0, 4000), chat_id: ev.chat_id } }];\n"
       },
       "id": "f9db0455-0f06-56cd-89f4-dacff6e3678d",
       "name": "R · Bilan",
@@ -692,6 +692,54 @@
         4620,
         350
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Rattrapage réussi : la fiche du jour reçoit les nouveaux ID → la vérification suivante ne republie pas\nconst prep = $('R · Préparer').first().json;\nconst r = $input.first().json;\nif (!r.instagram_id && !r.facebook_id) return [];\nconst f = prep.fiche || {};\nreturn [{ json: { ...f, statut: 'termine', rattrape_a: new Date().toISOString(),\n                  instagram_id: r.instagram_id || f.instagram_id || '', facebook_id: r.facebook_id || f.facebook_id || '' } }];\n"
+      },
+      "id": "c54f6fdd-41bc-561d-97ec-80253e946d4c",
+      "name": "R · Fiche à jour",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        50
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "toJson",
+        "mode": "each",
+        "binaryPropertyName": "data_json",
+        "options": {}
+      },
+      "id": "faacd5d1-e4f2-5ef4-b6b4-c42840754f88",
+      "name": "R · Fiche en fichier",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        4180,
+        50
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "=/files/muzrappel/_publications/{{ $now.setZone('Europe/Paris').toISODate() }}.json",
+        "dataPropertyName": "data_json",
+        "options": {}
+      },
+      "id": "8669f215-3f9c-57da-b1c7-588759c5a1a8",
+      "name": "R · Écrire fiche",
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        4400,
+        50
+      ],
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -922,7 +970,34 @@
       "main": [
         [
           {
+            "node": "R · Fiche à jour",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "R · Suivi SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "R · Fiche à jour": {
+      "main": [
+        [
+          {
+            "node": "R · Fiche en fichier",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "R · Fiche en fichier": {
+      "main": [
+        [
+          {
+            "node": "R · Écrire fiche",
             "type": "main",
             "index": 0
           }

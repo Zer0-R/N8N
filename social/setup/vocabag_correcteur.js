@@ -23,6 +23,9 @@ function mots(s) {
   }
   return out;
 }
+function tousMots(s) {
+  return normaliser(s).split(' ').filter(Boolean).flatMap(x => CJK.test(x) ? [...x].filter(c => CJK.test(c)) : [x]);
+}
 
 function distance(a, b) {               // Levenshtein (mots courts)
   const m = a.length, n = b.length;
@@ -44,7 +47,7 @@ function candidats(reveals) {
     const translit = String(r.answerDisplay || '').split('\n')[0];
     const ajout = (texte, type) => {
       const m = type === 'mot' ? normaliser(texte).split(' ').filter(Boolean) : mots(texte);
-      const tous = type === 'mot' ? m : normaliser(texte).split(' ').filter(Boolean).flatMap(x => CJK.test(x) ? [...x].filter(c => CJK.test(c)) : [x]);
+      const tous = type === 'mot' ? m : tousMots(texte);
       if (m.length) out.push({ texte, mots: m, tous, type, phrase: r.example_sentence, translit,
                                   traduction: type === 'mot' ? r.translation : r.example_translation });
     };
@@ -57,28 +60,30 @@ function candidats(reveals) {
 }
 
 function evaluer(texte, cands) {
-  const significatifs = mots(texte);
   const brut = normaliser(texte).split(' ').filter(Boolean);
   if (!brut.length) return null;
-  const meilleurDe = (liste, motsCommentaire) => {
-    let m = null;
-    for (const c of liste) {
-      const trouves = c.mots.filter(x => motsCommentaire.some(y => proche(y, x))).length;
-      const score = trouves / c.mots.length;
-      if (!m || score > m.score || (score === m.score && c.mots.length > m.cible.mots.length)) m = { score, trouves, cible: c };
-    }
-    return m;
-  };
-  // 1) la phrase prime : ≥ 85 % des mots significatifs → bravo ; ≥ 50 % et au moins 2 mots → presque
-  const p = meilleurDe(cands.filter(c => c.type === 'phrase' && c.mots.length >= 2), significatifs);
-  // « Bravo » : il faut aussi les petits mots (« is », « de »…), sinon c'est « Presque »
-  const complet = c => c.tous.filter(x => brut.some(y => proche(y, x) || y.includes(x))).length / c.tous.length;
-  if (p && p.score >= 0.85 && complet(p.cible) >= 0.85) return { ...p, type: 'bravo' };
-  if (p && ((p.score >= 0.5 && p.trouves >= 2) || p.score >= 0.85)) return { ...p, type: 'presque' };
-  // 2) sinon un mot du Reel écrit seul (commentaire court, mot exact)
+  const ct = tousMots(texte);                                    // mots entiers du commentaire (CJK : caractères)
+  const present = x => ct.some(y => proche(y, x));
+  // 1) la phrase prime. « Bravo » : ≥ 85 % de la phrase complète ET des mots significatifs (≥ 3 lettres) ;
+  //    « Presque » : ≥ 50 % des deux, au moins 2 mots en commun dont 1 significatif.
+  //    Phrase reconnue dès 3 mots (petits mots compris) ou 2 mots significatifs.
+  let p = null;
+  for (const c of cands.filter(c => c.type === 'phrase' && (c.tous.length >= 3 || c.mots.length >= 2))) {
+    const nTous = c.tous.filter(present).length, nSig = c.mots.filter(present).length;
+    const full = nTous / c.tous.length, sig = c.mots.length ? nSig / c.mots.length : full;
+    const score = Math.min(full, sig);
+    if (!p || score > p.score || (score === p.score && c.tous.length > p.cible.tous.length)) p = { score, full, sig, nTous, nSig, cible: c };
+  }
+  if (p && p.full >= 0.85 && p.sig >= 0.85) return { ...p, type: 'bravo' };
+  if (p && p.full >= 0.5 && p.sig >= 0.5 && p.nTous >= 2 && (p.nSig >= 1 || !p.cible.mots.length)) return { ...p, type: 'presque' };
+  // 2) sinon un mot du Reel écrit seul (commentaire de 3 mots max). Chinois / japonais : le commentaire doit être
+  //    exactement le mot (sinon « 我不好意思 » validerait « 好 »).
   if (brut.length <= 3) {
-    const w = meilleurDe(cands.filter(c => c.type === 'mot'), brut.flatMap(x => CJK.test(x) ? [x, ...[...x]] : [x]));
-    if (w && w.score === 1) return { ...w, type: 'bravo' };
+    const colle = brut.join('');
+    for (const c of cands.filter(c => c.type === 'mot')) {
+      const ok = CJK.test(c.texte) ? colle === c.mots.join('') : c.mots.every(x => brut.some(y => proche(y, x)));
+      if (ok) return { score: 1, cible: c, type: 'bravo' };
+    }
   }
   return null;
 }
@@ -92,4 +97,4 @@ function reponse(ev) {
   return `Presque 💪 La phrase exacte : « ${c.phrase} »` + (c.translit && c.translit !== c.phrase ? ` (${c.translit})` : '');
 }
 
-if (typeof module !== 'undefined') module.exports = { normaliser, mots, candidats, evaluer, reponse };
+if (typeof module !== 'undefined') module.exports = { normaliser, mots, tousMots, candidats, evaluer, reponse };

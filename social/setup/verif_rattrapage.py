@@ -43,6 +43,16 @@ return [{ json: {
 } }];
 """
 
+FICHE_MAJ_JS = r"""
+// Rattrapage réussi : la fiche du jour reçoit les nouveaux ID → la vérification suivante ne republie pas
+const prep = $('R · Préparer').first().json;
+const r = $input.first().json;
+if (!r.instagram_id && !r.facebook_id) return [];
+const f = prep.fiche || {};
+return [{ json: { ...f, statut: 'termine', rattrape_a: new Date().toISOString(),
+                  instagram_id: r.instagram_id || f.instagram_id || '', facebook_id: r.facebook_id || f.facebook_id || '' } }];
+"""
+
 BILAN_JS = r"""
 // Réécrit le bilan de « Évaluer » avec le résultat du rattrapage.
 const e = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -51,15 +61,20 @@ const lire = n => { try { return $(n).first().json; } catch (x) { return null; }
 const prep = lire('R · Préparer') || { raison: 'rattrapage non lancé' };
 const res = lire('R · Publier') || {};
 const pb = [...ev.pb];
-const maj = (idx, nom, id, err) => {
+const fiche = prep.fiche || {};
+const maj = (idx, nom, cle) => {
   if (idx < 0) return;
-  if (id) pb[idx] = `🔁 ${nom} : Reel manquant, republié automatiquement (${e(id)})`;
-  else pb[idx] += ` — rattrapage échoué : ${e(prep.raison || err || res.error?.message || 'erreur inconnue')}`;
+  const idFiche = fiche[cle + '_id'];
+  if (idFiche && prep[cle] === false && !/encore en cours/.test(prep.raison || ''))
+    pb[idx] = `ℹ️ ${nom} : déjà publié d'après la fiche du jour (${e(idFiche)}), pas encore visible dans l'API — pas de republication`;
+  else if (res[cle + '_id']) pb[idx] = `🔁 ${nom} : Reel manquant, republié automatiquement (${e(res[cle + '_id'])})`;
+  else pb[idx] += ` — rattrapage échoué : ${e(prep.raison || res[cle + '_erreur'] || res.error?.message || 'erreur inconnue')}`;
 };
-maj(ev.rat.instagram, 'Instagram', res.instagram_id, res.instagram_erreur);
-maj(ev.rat.facebook, 'Facebook', res.facebook_id, res.facebook_erreur);
-const vrais = pb.filter(x => !x.startsWith('🔁'));
-const titre = vrais.length ? `🚨 <b>${ev.label} — ${vrais.length} problème(s)</b>` : `🔁 <b>${ev.label} — Reel rattrapé</b>`;
+maj(ev.rat.instagram, 'Instagram', 'instagram');
+maj(ev.rat.facebook, 'Facebook', 'facebook');
+const vrais = pb.filter(x => !x.startsWith('🔁') && !x.startsWith('ℹ️'));
+const titre = vrais.length ? `🚨 <b>${ev.label} — ${vrais.length} problème(s)</b>`
+  : pb.some(x => x.startsWith('🔁')) ? `🔁 <b>${ev.label} — Reel rattrapé</b>` : `ℹ️ <b>${ev.label} — rien à rattraper</b>`;
 const texte = `${titre} (${ev.entete})\n\n` + [...pb, ...(ev.test ? ev.ok.map(x => '✔️ ' + x) : [])].join('\n');
 return [{ json: { envoyer: true, problemes: vrais.length, texte: texte.slice(0, 4000), chat_id: ev.chat_id } }];
 """
@@ -109,12 +124,22 @@ def ajouter(nodes, link, ns, node_fn, http_fn, sous_wf, dossier, cred_db, sql_js
            {'operation': 'executeQuery', 'query': '={{ $json.sql }}', 'options': {}}, [x + 2200, y - 200],
            credentials=cred_db, **cont),
         nd('R · Bilan', 'n8n-nodes-base.code', 2, {'jsCode': BILAN_JS.strip() + '\n'}, [x + 2420, y]),
+        nd('R · Fiche à jour', 'n8n-nodes-base.code', 2, {'jsCode': FICHE_MAJ_JS.strip() + '\n'}, [x + 1760, y - 300],
+           onError='continueRegularOutput'),
+        nd('R · Fiche en fichier', 'n8n-nodes-base.convertToFile', 1.1,
+           {'operation': 'toJson', 'mode': 'each', 'binaryPropertyName': 'data_json', 'options': {}}, [x + 1980, y - 300],
+           onError='continueRegularOutput'),
+        nd('R · Écrire fiche', 'n8n-nodes-base.readWriteFile', 1.1,
+           {'operation': 'write', 'fileName': f"={dossier}/{{{{ $now.setZone('Europe/Paris').toISODate() }}}}.json",
+            'dataPropertyName': 'data_json', 'options': {}}, [x + 2200, y - 300], onError='continueRegularOutput'),
     ]
     for a, b, o in [
         ('Rattraper ?', 'R · Lire fiche', 0), ('Rattraper ?', 'Envoyer ?', 1),
         ('R · Lire fiche', 'R · Fiche', 0), ('R · Fiche', 'R · Lire vidéo', 0), ('R · Lire vidéo', 'R · Héberger', 0),
         ('R · Héberger', 'R · Préparer', 0), ('R · Préparer', 'R · Publier ?', 0),
         ('R · Publier ?', 'R · Publier', 0), ('R · Publier ?', 'R · Bilan', 1),
+        ('R · Publier', 'R · Fiche à jour', 0), ('R · Fiche à jour', 'R · Fiche en fichier', 0),
+        ('R · Fiche en fichier', 'R · Écrire fiche', 0),
         ('R · Publier', 'R · Suivi SQL', 0), ('R · Suivi SQL', 'R · SQL ?', 0),
         ('R · SQL ?', 'R · Marquer', 0), ('R · SQL ?', 'R · Bilan', 1), ('R · Marquer', 'R · Bilan', 0),
         ('R · Bilan', 'Envoyer ?', 0),
